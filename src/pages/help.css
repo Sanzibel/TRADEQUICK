@@ -1,0 +1,97 @@
+.help-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--black);
+}
+
+.help-content {
+  flex: 1;
+  max-width: 1100px;
+  margin: 60px auto;
+  width: 90%;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 40px;
+}
+
+.faq-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.faq-item {
+  background-color: var(--black-light);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 25px;
+  transition: border-color 0.3s;
+}
+
+.faq-item:hover {
+  border-color: var(--gold);
+}
+
+.faq-item h3 {
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+
+.faq-item p {
+  color: var(--text-gray);
+  line-height: 1.6;
+}
+
+.contact-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.contact-card {
+  background-color: var(--black-light);
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  padding: 25px;
+  text-align: center;
+}
+
+.trading-tips {
+  background-color: var(--black-light);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 25px;
+}
+
+.trading-tips ul {
+  list-style: none;
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trading-tips li {
+  color: var(--text-gray);
+  font-size: 0.9rem;
+  padding-left: 20px;
+  position: relative;
+}
+
+.trading-tips li::before {
+  content: "•";
+  color: var(--gold);
+  position: absolute;
+  left: 0;
+  font-weight: bold;
+}

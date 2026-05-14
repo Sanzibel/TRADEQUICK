@@ -1,0 +1,132 @@
+.reports-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--black);
+}
+
+.reports-content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 40px auto;
+  width: 90%;
+}
+
+.reports-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.chart-card {
+  background-color: var(--black-light);
+  border: 1px solid var(--gold);
+  border-radius: 15px;
+  padding: 30px;
+}
+
+/* Simulated Bar Chart */
+.bar-chart-sim {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.bar-label {
+  width: 140px;
+  font-size: 0.9rem;
+  color: var(--text-gray);
+}
+
+.bar-container {
+  flex: 1;
+  height: 12px;
+  background-color: #222;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background-color: var(--gold);
+  transition: width 1s ease-in-out;
+}
+
+.bar-value {
+  width: 30px;
+  font-weight: bold;
+  text-align: right;
+}
+
+/* Stats List */
+.stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #333;
+}
+
+/* Activity Table */
+.activity-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--black-light);
+  border: 1px solid #333;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.activity-table th {
+  text-align: left;
+  padding: 15px;
+  background-color: #111;
+  color: var(--gold);
+  border-bottom: 1px solid #333;
+}
+
+.activity-table td {
+  padding: 15px;
+  border-bottom: 1px solid #222;
+}
+
+.status-completed { color: #00ff00; }
+.status-pending { color: var(--gold); }
+.status-cancelled { color: #ff4444; }
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  .reports-header {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  .activity-table {
+    display: block;
+    overflow-x: auto;
+  }
+}

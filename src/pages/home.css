@@ -1,0 +1,261 @@
+.home-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--black);
+}
+
+.main-layout {
+  display: flex;
+  flex: 1;
+}
+
+/* Sidebar Styles */
+.sidebar {
+  width: 280px;
+  background-color: var(--black-light);
+  border-right: 1px solid var(--gold);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.sidebar h3 {
+  color: var(--gold);
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-gray);
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.filter-option:hover {
+  color: var(--gold);
+}
+
+/* Top Bar Styles */
+.top-bar {
+  height: 70px;
+  background-color: var(--black-light);
+  border-bottom: 1px solid var(--gold);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 40px;
+}
+
+.search-container {
+  flex: 0 1 400px;
+}
+
+.search-bar {
+  width: 100%;
+  padding: 10px 15px;
+  background-color: var(--black);
+  border: 1px solid var(--gold);
+  border-radius: 20px;
+  color: white;
+  outline: none;
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Center Content Styles */
+.center-content {
+  flex: 1;
+  padding: 30px;
+  background-color: var(--black);
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 25px;
+}
+
+/* Item Card Styles */
+.item-card {
+  background-color: var(--black-light);
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s;
+  display: flex;
+  flex-direction: column;
+}
+
+.item-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(212, 175, 55, 0.2);
+}
+
+.item-image-container {
+  height: 180px;
+  background-color: #0a0a0a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.item-image {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+}
+
+.game-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background-color: var(--gold);
+  color: var(--black);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: bold;
+}
+
+.item-details {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item-name {
+  font-weight: bold;
+  font-size: 1.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-value {
+  color: var(--gold);
+  font-weight: bold;
+}
+
+.item-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.btn-trade {
+  flex: 1;
+  background-color: var(--gold);
+  color: var(--black);
+  padding: 8px;
+  border-radius: 6px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.btn-message {
+  padding: 8px;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  border-radius: 6px;
+}
+
+/* Footer Styles */
+.footer {
+  padding: 40px 80px;
+  background-color: var(--black-light);
+  border-top: 1px solid var(--gold);
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-gray);
+  font-size: 0.9rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 30px;
+}
+
+.footer-links a:hover {
+  color: var(--gold);
+}
+
+/* Gold Glow Text */
+.gold-glow {
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+
+/* Common Buttons */
+.btn-gold {
+  background-color: var(--gold);
+  color: var(--black);
+  padding: 10px 20px;
+  border-radius: 25px;
+  font-weight: bold;
+  transition: background-color 0.3s;
+}
+
+.btn-gold:hover {
+  background-color: var(--gold-light);
+}
+
+.btn-outline-gold {
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: 10px 20px;
+  border-radius: 25px;
+  font-weight: bold;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 220px;
+  }
+  .top-bar {
+    padding: 0 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--gold);
+  }
+  .top-bar {
+    flex-direction: column;
+    height: auto;
+    padding: 15px;
+    gap: 15px;
+  }
+  .search-container {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .hero-section h1 {
+    font-size: 2rem !important;
+  }
+}

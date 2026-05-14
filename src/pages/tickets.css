@@ -1,0 +1,256 @@
+.ticket-page {
+  background: var(--black);
+  color: white;
+  min-height: 100vh;
+}
+
+.ticket-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px 70px;
+}
+
+.ticket-header,
+.ticket-room-header,
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.ticket-header p,
+.ticket-room-header p,
+.muted {
+  color: var(--text-gray);
+  line-height: 1.6;
+}
+
+.ticket-actions-grid,
+.ticket-room-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.ticket-room-grid {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.ticket-panel {
+  background: var(--black-light);
+  border: 1px solid #2b2b2b;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.ticket-panel h2 {
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+.ticket-panel input,
+.ticket-panel textarea {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #0b0b0b;
+  color: white;
+}
+
+.ticket-panel textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ticket-row,
+.log-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: #0f0f0f;
+}
+
+.ticket-row:hover {
+  border-color: var(--gold);
+}
+
+.ticket-code {
+  color: var(--gold);
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.ticket-status {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  color: var(--gold);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.status-completed {
+  color: #44ff88;
+  border-color: #44ff88;
+}
+
+.status-cancelled {
+  color: #ff6666;
+  border-color: #ff6666;
+}
+
+.ticket-progress {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.progress-step {
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: #0f0f0f;
+  color: #777;
+}
+
+.progress-step span {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: #222;
+}
+
+.progress-step.complete {
+  color: white;
+  border-color: var(--gold);
+}
+
+.progress-step.complete span {
+  background: var(--gold);
+  color: var(--black);
+}
+
+.item-declaration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.declaration-card {
+  min-height: 220px;
+  padding: 16px;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background: #0f0f0f;
+}
+
+.declaration-card img,
+.log-row img,
+.evidence-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  margin: 10px 0;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #050505;
+}
+
+.ticket-form {
+  padding-top: 18px;
+  border-top: 1px solid #333;
+}
+
+.ticket-form.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 110px;
+  gap: 12px;
+}
+
+.log-grid,
+.history-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-row img {
+  max-width: 170px;
+}
+
+.log-row span,
+.history-strip p {
+  display: block;
+  margin-top: 8px;
+  color: #777;
+  font-size: 0.8rem;
+}
+
+.history-strip div {
+  padding: 14px;
+  border-left: 3px solid var(--gold);
+  background: #0f0f0f;
+}
+
+.danger-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  background: #4d1111;
+  color: #fff;
+}
+
+.empty-state,
+.ticket-loading {
+  text-align: center;
+  padding: 90px 20px;
+}
+
+@media (max-width: 850px) {
+  .ticket-actions-grid,
+  .ticket-room-grid,
+  .item-declaration-grid,
+  .ticket-progress,
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-header,
+  .ticket-room-header,
+  .section-title-row,
+  .ticket-row,
+  .log-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
