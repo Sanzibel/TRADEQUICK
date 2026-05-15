@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { toast } from '../utils/notifications.jsx';
 
 const ChatBox = ({ isOpen, onClose, user }) => {
   const [activeTab, setActiveTab] = useState('trades'); // 'messages' or 'trades'
@@ -30,11 +31,11 @@ const ChatBox = ({ isOpen, onClose, user }) => {
         trade_id: tradeId,
         action: action === 'confirm' ? 'in_escrow' : 'declined'
       });
-      alert(action === 'confirm' ? "Trade accepted! Moving to Escrow Room." : "Trade declined.");
+      toast.success(action === 'confirm' ? "Trade accepted! Moving to Escrow Room." : "Trade declined.");
       fetchUserTrades(); // Refresh list
     } catch (err) {
       console.error("Respond error:", err);
-      alert("Failed to process trade.");
+      toast.error("Failed to process trade.");
     }
   };
 

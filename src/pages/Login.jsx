@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toast } from "../utils/notifications.jsx";
 import "./auth.css";
 
 export default function Login() {
@@ -22,7 +23,7 @@ export default function Login() {
       const res = await axios.post("/api/auth/login", formData);
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
-      alert("Login successful!");
+      toast.success("Login successful!");
       navigate("/");
     } catch (err) {
       setError(err.response?.data?.error || "Invalid credentials");

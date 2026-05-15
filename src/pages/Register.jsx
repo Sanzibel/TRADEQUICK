@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toast } from "../utils/notifications.jsx";
 import "./auth.css";
 
 export default function Register() {
@@ -37,7 +38,7 @@ export default function Register() {
           email: formData.email,
           password: formData.password
         });
-        alert("Registration successful! Please log in.");
+        toast.success("Registration successful! Please log in.");
       navigate("/login");
     } catch (err) {
       setError(err.response?.data?.error || "Registration failed");

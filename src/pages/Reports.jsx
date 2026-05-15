@@ -3,6 +3,7 @@ import axios from 'axios';
 import './reports.css';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
+import { toast } from '../utils/notifications.jsx';
 
 export default function Reports() {
   const [token] = useState(localStorage.getItem("token"));
@@ -40,7 +41,7 @@ export default function Reports() {
     a.setAttribute('href', url);
     a.setAttribute('download', 'quicktrade_report.csv');
     a.click();
-    alert("Report exported as CSV!");
+    toast.success("Report exported as CSV!");
   };
 
   return (

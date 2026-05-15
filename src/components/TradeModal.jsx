@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { toast } from '../utils/notifications.jsx';
 
 const TradeModal = ({ isOpen, onClose, item, user, token }) => {
   const [listings, setListings] = useState([]);
@@ -25,18 +26,18 @@ const TradeModal = ({ isOpen, onClose, item, user, token }) => {
 
   const handleSendOffer = async () => {
     if (!selectedOfferItem) {
-      alert("Please select an item from your listings to offer!");
+      toast.error("Please select an item from your listings to offer!");
       return;
     }
 
     const selectedMmData = middlemen.find(mm => mm.id === selectedMiddleman);
     if (!selectedMiddleman || !selectedMmData) {
-      alert("Please select a trusted middleman for this trade!");
+      toast.error("Please select a trusted middleman for this trade!");
       return;
     }
 
     if (selectedMmData.status === 'busy') {
-      alert("This middleman is currently busy/unavailable. Please choose an available one (Green).");
+      toast.error("This middleman is currently busy/unavailable. Please choose an available one (Green).");
       return;
     }
 
@@ -50,11 +51,11 @@ const TradeModal = ({ isOpen, onClose, item, user, token }) => {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert("Trade offer sent successfully with middleman request!");
+      toast.success("Trade offer sent successfully with middleman request!");
       onClose();
     } catch (err) {
       console.error("Trade Error:", err.response?.data || err.message);
-      alert(`Error sending offer: ${err.response?.data?.error || "Server error"}`);
+      toast.error(`Error sending offer: ${err.response?.data?.error || "Server error"}`);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { toast } from '../utils/notifications.jsx';
 
 const PostItemModal = ({ isOpen, onClose, onPost }) => {
   const [games, setGames] = useState([]);
@@ -69,11 +70,11 @@ const PostItemModal = ({ isOpen, onClose, onPost }) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
-        alert("File size exceeds 2MB limit for the demo!");
+        toast.error("File size exceeds 2MB limit for the demo!");
         return;
       }
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        alert("Invalid file type! Please upload a JPG, PNG, or WEBP image.");
+        toast.error("Invalid file type! Please upload a JPG, PNG, or WEBP image.");
         return;
       }
       

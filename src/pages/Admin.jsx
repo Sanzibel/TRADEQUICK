@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
+import { toast } from '../utils/notifications.jsx';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -84,11 +85,11 @@ export default function Admin() {
     e.preventDefault();
     try {
       await axios.post('/api/admin/games', gameForm, authConfig);
-      alert("Game added!");
+      toast.success("Game added!");
       setGameForm({ name: '', category: '', image_url: '' });
       fetchGames();
     } catch (err) {
-      alert("Failed to add game");
+      toast.error("Failed to add game");
     }
   };
 
@@ -96,11 +97,11 @@ export default function Admin() {
     e.preventDefault();
     try {
       await axios.post('/api/admin/categories', categoryForm, authConfig);
-      alert("Category added!");
+      toast.success("Category added!");
       setCategoryForm({ name: '' });
       fetchCategories();
     } catch (err) {
-      alert("Failed to add category");
+      toast.error("Failed to add category");
     }
   };
 

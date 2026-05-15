@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
+import { confirmToast, toast } from '../utils/notifications.jsx';
 import './tickets.css';
 
 const steps = [
@@ -101,7 +102,7 @@ export default function TradeTicketRoom() {
   const readFileAsDataUrl = (file, callback) => {
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      alert('File size exceeds 2MB limit.');
+      toast.error('File size exceeds 2MB limit.');
       return;
     }
     const reader = new FileReader();
@@ -118,9 +119,9 @@ export default function TradeTicketRoom() {
         quantity: Number(itemForm.quantity)
       });
       setPayload(res.data);
-      alert('Item declaration saved.');
+      toast.success('Item declaration saved.');
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to save item declaration');
+      toast.error(err.response?.data?.error || 'Failed to save item declaration');
     }
   };
 
@@ -132,7 +133,7 @@ export default function TradeTicketRoom() {
       });
       setPayload(res.data);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to join ticket');
+      toast.error(err.response?.data?.error || 'Failed to join ticket');
     }
   };
 
@@ -144,7 +145,7 @@ export default function TradeTicketRoom() {
       });
       setPayload(res.data);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to assign middleman');
+      toast.error(err.response?.data?.error || 'Failed to assign middleman');
     }
   };
 
@@ -160,7 +161,7 @@ export default function TradeTicketRoom() {
       setActionEvidence('');
       setActionNote('');
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to save action');
+      toast.error(err.response?.data?.error || 'Failed to save action');
     }
   };
 
@@ -172,14 +173,17 @@ export default function TradeTicketRoom() {
         note: actionNote
       });
       setPayload(res.data);
-      alert('Trade completed and logged.');
+      toast.success('Trade completed and logged.');
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to complete ticket');
+      toast.error(err.response?.data?.error || 'Failed to complete ticket');
     }
   };
 
   const cancelTicket = async () => {
-    if (!window.confirm('Cancel this trade ticket?')) return;
+    const confirmed = await confirmToast('Cancel this trade ticket?', {
+      confirmLabel: 'Cancel Ticket'
+    });
+    if (!confirmed) return;
     try {
       const res = await axios.post(`/api/tickets/${ticketCode}/cancel`, {
         actor_user_id: user.user_id,
@@ -187,7 +191,7 @@ export default function TradeTicketRoom() {
       });
       setPayload(res.data);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to cancel ticket');
+      toast.error(err.response?.data?.error || 'Failed to cancel ticket');
     }
   };
 
