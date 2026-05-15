@@ -21,6 +21,8 @@ export default function EscrowRoom() {
   const pollingRef = useRef(null);
   const isProcessingAIRef = useRef(false);
   const shouldFollowChatRef = useRef(true);
+  const lastMessageKeyRef = useRef('');
+  const forceNextChatScrollRef = useRef(false);
 
   const [token] = useState(localStorage.getItem('token'));
   const [user] = useState(() => {
@@ -111,7 +113,10 @@ export default function EscrowRoom() {
 
   useEffect(() => {
     if (shouldFollowChatRef.current) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const el = chatContainerRef.current;
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
     }
   }, [messages]);
 
@@ -184,7 +189,7 @@ export default function EscrowRoom() {
 
   async function fetchMessages() {
     try {
-      shouldFollowChatRef.current = isChatNearBottom();
+      const wasNearBottom = isChatNearBottom();
       const res = await axios.get(`/api/messages/trade/${tradeId}`);
       const dbMessages = res.data.map(m => ({
         id: m.msg_id,
@@ -198,6 +203,15 @@ export default function EscrowRoom() {
         isAI: Number(m.sender_id) === 0 || m.type === 'bot',
         isSystem: m.type === 'system'
       }));
+      const lastMessage = dbMessages[dbMessages.length - 1];
+      const nextMessageKey = lastMessage
+        ? `${lastMessage.id}-${lastMessage.timestamp}-${lastMessage.type}-${String(lastMessage.content || '').length}`
+        : 'empty';
+      const hasNewMessage = nextMessageKey !== lastMessageKeyRef.current;
+
+      shouldFollowChatRef.current = forceNextChatScrollRef.current || (hasNewMessage && wasNearBottom);
+      lastMessageKeyRef.current = nextMessageKey;
+      forceNextChatScrollRef.current = false;
 
       setMessages([
         {
@@ -320,6 +334,7 @@ export default function EscrowRoom() {
     const msgContent = newMessage;
     setNewMessage('');
     shouldFollowChatRef.current = true;
+    forceNextChatScrollRef.current = true;
     setSendingMessage(true);
 
     try {
