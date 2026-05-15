@@ -5,6 +5,15 @@ import { Link } from 'react-router-dom';
 const Sidebar = ({ filters, onFilterChange }) => {
   const [games, setGames] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [isAdmin] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      return user?.role === 'admin';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     fetchGames();
@@ -156,14 +165,16 @@ const Sidebar = ({ filters, onFilterChange }) => {
           <p style={{ fontSize: '0.65rem', color: '#666', marginTop: '10px', fontStyle: 'italic' }}>* Rates are estimates based on market average.</p>
         </div>
       </div>
-      <div className="filter-group" style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #333' }}>
-        <Link to="/admin" style={{ 
-          display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--gold)', 
-          textDecoration: 'none', fontSize: '0.9rem', opacity: 0.7 
-        }}>
-          <span style={{ fontSize: '1.2rem' }}>⚙️</span> Admin Panel
-        </Link>
-      </div>
+      {isAdmin && (
+        <div className="filter-group" style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #333' }}>
+          <Link to="/admin" style={{ 
+            display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--gold)', 
+            textDecoration: 'none', fontSize: '0.9rem', opacity: 0.7 
+          }}>
+            Admin Panel
+          </Link>
+        </div>
+      )}
     </aside>
   );
 };

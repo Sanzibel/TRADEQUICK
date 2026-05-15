@@ -128,7 +128,7 @@ exports.getReports = async (req, res) => {
       SELECT t.trade_id, t.status, t.timestamp, ip1.name as offered_item, ip2.name as requested_item
       FROM Trades t
       JOIN ItemPosts ip1 ON t.item_offered = ip1.post_id
-      JOIN ItemPosts ip2 ON t.item_requested = ip2.item_id
+      JOIN ItemPosts ip2 ON t.item_requested = ip2.post_id
       ORDER BY t.timestamp DESC
       LIMIT 10
     `);

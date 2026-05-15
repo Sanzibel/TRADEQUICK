@@ -67,6 +67,7 @@ const initDB = async () => {
                         username TEXT UNIQUE NOT NULL,
                         email TEXT UNIQUE NOT NULL,
                         password TEXT NOT NULL,
+                        role TEXT DEFAULT 'user',
                         premium_status INTEGER DEFAULT 0,
                         balance DECIMAL(18, 2) DEFAULT 0.00,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -244,6 +245,10 @@ const initDB = async () => {
                     await dbInterface.run('ALTER TABLE Messages ADD COLUMN IF NOT EXISTS trade_id INTEGER');
                 } catch (e) { console.log("Postgres Migration Info: trade_id column check."); }
 
+                try {
+                    await dbInterface.run('ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT \'user\'');
+                } catch (e) { console.log("Postgres Migration Info: user role column check."); }
+
                 console.log("PostgreSQL Tables Verified/Created and Migrated");
                 db = dbInterface;
                 return db;
@@ -272,6 +277,7 @@ const initDB = async () => {
                         username TEXT UNIQUE NOT NULL,
                         email TEXT UNIQUE NOT NULL,
                         password TEXT NOT NULL,
+                        role TEXT DEFAULT 'user',
                         premium_status INTEGER DEFAULT 0,
                         balance DECIMAL(18, 2) DEFAULT 0.00,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -426,6 +432,7 @@ const initDB = async () => {
                     'ALTER TABLE Trades ADD COLUMN status_detail TEXT DEFAULT "initial"',
                     'ALTER TABLE Messages ADD COLUMN type TEXT DEFAULT "user"',
                     'ALTER TABLE Messages ADD COLUMN trade_id INTEGER',
+                    'ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"',
                     'CREATE TABLE IF NOT EXISTS TradeLogs (log_id INTEGER PRIMARY KEY AUTOINCREMENT, trade_id INTEGER, event TEXT, details TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'
                 ];
                 for (const migration of migrations) {

@@ -2,6 +2,16 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const TopBar = ({ token, logout, onPostItem, searchTerm, onSearchChange }) => {
+  const isAdmin = (() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      const user = savedUser ? JSON.parse(savedUser) : null;
+      return user?.role === 'admin';
+    } catch {
+      return false;
+    }
+  })();
+
   return (
     <header className="top-bar">
       <div className="logo-container">
@@ -24,6 +34,12 @@ const TopBar = ({ token, logout, onPostItem, searchTerm, onSearchChange }) => {
         {token && (
           <Link to="/tickets" className="gold-glow" style={{ fontWeight: 'bold', marginRight: '10px' }}>
             Tickets
+          </Link>
+        )}
+
+        {token && isAdmin && (
+          <Link to="/admin" className="gold-glow" style={{ fontWeight: 'bold', marginRight: '10px' }}>
+            Admin
           </Link>
         )}
 

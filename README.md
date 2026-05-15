@@ -1,16 +1,86 @@
-# React + Vite
+# QuickTrade
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+QuickTrade is a web-based digital item trading system. It allows users to register, post game items, bookmark listings, create trade offers, exchange messages, and use middleman-assisted trade tickets for safer transactions.
 
-Currently, two official plugins are available:
+## Technology Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Frontend
 
-## React Compiler
+- React.js
+- Vite
+- Axios
+- CSS
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Backend
 
-## Expanding the ESLint configuration
+- Node.js
+- Express.js
+- JWT authentication
+- bcrypt password hashing
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Database
+
+- SQLite for local development
+- PostgreSQL / Neon for production deployment
+
+## Core Modules
+
+- Authentication and user accounts
+- Item posting and listing management
+- Bookmark management
+- Direct trade offers
+- Trade messaging
+- Middleman-assisted trade tickets
+- Ticket item declarations
+- Ticket verification logs and status history
+- Admin-managed games and categories
+- Reports and analytics
+
+## Main Database Tables
+
+- `users`
+- `Items`
+- `ItemPosts`
+- `Bookmarks`
+- `Trades`
+- `TradeLogs`
+- `Conversations`
+- `Messages`
+- `Games`
+- `Categories`
+- `TradeTickets`
+- `TradeTicketItems`
+- `TradeTicketLogs`
+- `TradeTicketStatusHistory`
+
+## Development Setup
+
+Install dependencies from the repository root:
+
+```bash
+npm install
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+The backend source is located in:
+
+```text
+quicktrade-system-main/backend
+```
+
+The database schema reference is located in:
+
+```text
+quicktrade-system-main/backend/database.sql
+```
+
+The runtime database initialization logic is located in:
+
+```text
+quicktrade-system-main/backend/db.js
+```

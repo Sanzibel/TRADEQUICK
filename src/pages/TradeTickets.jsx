@@ -20,6 +20,7 @@ export default function TradeTickets() {
   const [joinCode, setJoinCode] = useState('');
   const [inviteNote, setInviteNote] = useState('');
   const [loading, setLoading] = useState(false);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (user) fetchTickets();
@@ -92,7 +93,7 @@ export default function TradeTickets() {
             <h1 className="gold-glow">Trade Tickets</h1>
             <p>Open a middleman-assisted trade room, invite the other trader, declare items, and complete verification with a human admin.</p>
           </div>
-          <Link to="/admin" className="btn-outline-gold">Admin Queue</Link>
+          {isAdmin && <Link to="/admin" className="btn-outline-gold">Admin Queue</Link>}
         </div>
 
         {!user ? (

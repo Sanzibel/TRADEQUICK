@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { Link, useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
 
 export default function Admin() {
+  const navigate = useNavigate();
   const [token] = useState(localStorage.getItem("token"));
+  const [user] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem("user");
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
   const [stats, setStats] = useState({ users: 0, items: 0, trades: 0 });
   const [games, setGames] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -15,19 +25,15 @@ export default function Admin() {
     completed: [],
     cancelled: []
   });
-  const [loading, setLoading] = useState(false);
   
   // Form states
   const [gameForm, setGameForm] = useState({ name: '', category: '', image_url: '' });
   const [categoryForm, setCategoryForm] = useState({ name: '' });
+  const authConfig = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 
-  useEffect(() => {
-    fetchStats();
-    fetchGames();
-    fetchCategories();
-    fetchRecentTrades();
-    fetchTicketOverview();
-  }, []);
+  const accessError = user && user.role !== 'admin'
+    ? 'Admin access is required to view this dashboard.'
+    : '';
 
   const fetchRecentTrades = async () => {
     try {
@@ -40,7 +46,7 @@ export default function Admin() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get('/api/admin/stats');
+      const res = await axios.get('/api/admin/stats', authConfig);
       setStats(res.data);
     } catch (err) {
       console.error("Failed to fetch stats:", err);
@@ -49,7 +55,7 @@ export default function Admin() {
 
   const fetchTicketOverview = async () => {
     try {
-      const res = await axios.get('/api/tickets/admin/overview');
+      const res = await axios.get('/api/tickets/admin/overview', authConfig);
       setTicketOverview(res.data);
     } catch (err) {
       console.error("Failed to fetch ticket overview:", err);
@@ -77,7 +83,7 @@ export default function Admin() {
   const handleAddGame = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/admin/games', gameForm);
+      await axios.post('/api/admin/games', gameForm, authConfig);
       alert("Game added!");
       setGameForm({ name: '', category: '', image_url: '' });
       fetchGames();
@@ -89,7 +95,7 @@ export default function Admin() {
   const handleAddCategory = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/admin/categories', categoryForm);
+      await axios.post('/api/admin/categories', categoryForm, authConfig);
       alert("Category added!");
       setCategoryForm({ name: '' });
       fetchCategories();
@@ -98,12 +104,44 @@ export default function Admin() {
     }
   };
 
+  useEffect(() => {
+    if (!token || !user) {
+      navigate('/login');
+      return;
+    }
+
+    if (accessError) return;
+
+    fetchStats();
+    fetchGames();
+    fetchCategories();
+    fetchRecentTrades();
+    fetchTicketOverview();
+  }, [token, user?.role]);
+
   return (
     <div style={{ backgroundColor: 'var(--black)', minHeight: '100vh', color: 'white' }}>
       <TopBar token={token} />
       
       <main style={{ maxWidth: '1200px', margin: '40px auto', padding: '0 20px' }}>
         <h1 className="gold-glow" style={{ marginBottom: '30px' }}>Admin Dashboard</h1>
+
+        {accessError && (
+          <div style={{
+            backgroundColor: 'var(--black-light)',
+            border: '1px solid var(--gold)',
+            borderRadius: '12px',
+            padding: '28px',
+            marginBottom: '30px'
+          }}>
+            <h2 style={{ color: 'var(--gold)', marginBottom: '10px' }}>Access Restricted</h2>
+            <p style={{ color: '#ccc', marginBottom: '18px' }}>{accessError}</p>
+            <Link to="/" className="btn-outline-gold">Return Home</Link>
+          </div>
+        )}
+
+        {!accessError && (
+          <>
         
         {/* Stats Grid */}
         <div style={{ 
@@ -239,7 +277,7 @@ export default function Admin() {
                             fontSize: '0.8rem', padding: '10px', backgroundColor: '#111', 
                             borderLeft: '3px solid var(--gold)', display: 'flex', justifyContent: 'space-between'
                         }}>
-                            <span>Trade #{trade.trade_id}: {trade.offered_item} ⇄ {trade.requested_item}</span>
+                            <span>Trade #{trade.trade_id}: {trade.offered_item} &lt;-&gt; {trade.requested_item}</span>
                             <span style={{ color: 'var(--gold)' }}>{trade.status.toUpperCase()}</span>
                         </div>
                     )) : <p style={{ color: '#666' }}>No recent activity detected.</p>}
@@ -302,6 +340,8 @@ export default function Admin() {
             ))}
           </div>
         </div>
+          </>
+        )}
       </main>
 
       <Footer />
