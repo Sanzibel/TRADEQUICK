@@ -399,7 +399,10 @@ export default function Admin() {
               <div key={listing.post_id} style={{ backgroundColor: '#111', border: '1px solid #222', borderRadius: '10px', padding: '14px' }}>
                 <div style={{ color: 'var(--gold)', fontWeight: 'bold', marginBottom: '6px' }}>{listing.name}</div>
                 <div style={{ color: '#ccc', fontSize: '0.8rem' }}>{listing.game} / {listing.category || 'Uncategorized'}</div>
-                <div style={{ color: '#777', fontSize: '0.8rem', margin: '6px 0 12px' }}>${Number(listing.value).toLocaleString()}</div>
+                <div style={{ color: '#777', fontSize: '0.8rem', margin: '6px 0' }}>${Number(listing.value).toLocaleString()}</div>
+                <div style={{ color: listing.status === 'sold_out' ? '#ff7777' : 'var(--gold)', fontSize: '0.75rem', marginBottom: '12px', textTransform: 'uppercase' }}>
+                  {listing.status || 'available'}
+                </div>
                 <button className="danger-btn" style={{ width: '100%', padding: '8px' }} onClick={() => handleDeleteListing(listing.post_id)}>
                   Delete Listing
                 </button>

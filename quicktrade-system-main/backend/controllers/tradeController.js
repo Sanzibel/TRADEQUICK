@@ -87,6 +87,16 @@ const ensureEscrowTicket = async (db, tradeId) => {
   );
 };
 
+const setTradeListingsStatus = async (db, tradeId, status) => {
+  const trade = await db.get('SELECT item_offered, item_requested FROM Trades WHERE trade_id = ?', [Number(tradeId)]);
+  if (!trade) return;
+
+  await db.run(
+    'UPDATE ItemPosts SET status = ? WHERE post_id IN (?, ?)',
+    [status, trade.item_offered, trade.item_requested]
+  );
+};
+
 exports.createTrade = async (req, res) => {
   const db = await sql.getDB();
   const isProduction = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.NODE_ENV === 'production';
@@ -101,7 +111,7 @@ exports.createTrade = async (req, res) => {
 
     // 1. Check if both items exist
     const items = await db.all(
-      'SELECT post_id FROM ItemPosts WHERE post_id IN (?, ?)',
+      "SELECT post_id, COALESCE(status, 'available') AS status FROM ItemPosts WHERE post_id IN (?, ?)",
       [item_offered, item_requested]
     );
 
@@ -111,6 +121,11 @@ exports.createTrade = async (req, res) => {
     if (!offeredExists || !requestedExists) {
       console.error(`[CREATE_TRADE] Items not found. Offered: ${offeredExists}, Requested: ${requestedExists}`);
       throw new Error("One or both items not found in listings");
+    }
+
+    const unavailable = items.find(item => item.status !== 'available');
+    if (unavailable) {
+      throw new Error(unavailable.status === 'sold_out' ? "This item is already sold out." : "This item is currently pending in another trade.");
     }
 
     // 2. Insert the trade record
@@ -141,7 +156,10 @@ exports.respondTrade = async (req, res) => {
 
     await db.run('UPDATE Trades SET status = ? WHERE trade_id = ?', [action, trade_id]);
     if (action === 'in_escrow') {
+      await setTradeListingsStatus(db, trade_id, 'pending');
       await ensureEscrowTicket(db, trade_id);
+    } else {
+      await setTradeListingsStatus(db, trade_id, 'available');
     }
     
     res.json({ message: `Trade ${action === 'in_escrow' ? 'accepted' : action} successfully` });
@@ -176,6 +194,10 @@ exports.cancelTrade = async (req, res) => {
     await db.run(
       'UPDATE Items SET tradable_status = 1 WHERE item_id IN (?, ?)',
       [item_offered, item_requested]
+    );
+    await db.run(
+      'UPDATE ItemPosts SET status = ? WHERE post_id IN (?, ?)',
+      ['available', item_offered, item_requested]
     );
 
     // 3. Update trade status

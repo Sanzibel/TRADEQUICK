@@ -67,10 +67,11 @@ export default function Profile() {
       const res = await axios.get(`/api/items/bookmarks/${user.user_id}`);
       setFavorites(res.data.map(item => ({
         id: item.post_id,
-        name: item.name,
-        game: item.game,
-        value: item.value,
-        image: item.screenshot_url || "https://via.placeholder.com/150"
+          name: item.name,
+          game: item.game,
+          value: item.value,
+          image: item.screenshot_url || "https://via.placeholder.com/150",
+          status: item.status || 'available'
       })));
     } catch (err) {
       console.error("Failed to fetch favorites:", err);
@@ -94,7 +95,8 @@ export default function Profile() {
           game: item.game,
           value: Number(item.value),
           image: item.screenshot_url || "https://via.placeholder.com/150",
-          created_at: item.created_at
+          created_at: item.created_at,
+          status: item.status || 'available'
         })));
       }
     } catch (err) {
@@ -283,6 +285,11 @@ export default function Profile() {
                       <span style={{ fontSize: '0.7rem', color: 'var(--gold)', textTransform: 'uppercase' }}>{item.game}</span>
                       <h4 style={{ margin: '5px 0', fontSize: '1.1rem' }}>{item.name}</h4>
                       <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>Value: ${item.value}</p>
+                      {item.status !== 'available' && (
+                        <p style={{ color: item.status === 'sold_out' ? '#ff7777' : 'var(--gold)', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                          {item.status === 'sold_out' ? 'Sold Out' : 'Pending Trade'}
+                        </p>
+                      )}
                       <p style={{ color: '#666', fontSize: '0.7rem', marginTop: '10px' }}>Listed on: {new Date(item.created_at).toLocaleDateString()}</p>
                       
                       <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>

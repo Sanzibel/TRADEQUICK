@@ -95,6 +95,7 @@ const initDB = async () => {
                         value DECIMAL(18, 2) NOT NULL,
                         category TEXT,
                         tags TEXT,
+                        status TEXT DEFAULT 'available',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     );
@@ -251,6 +252,10 @@ const initDB = async () => {
                 } catch (e) { console.log("Postgres Migration Info: user role column check."); }
 
                 try {
+                    await dbInterface.run('ALTER TABLE ItemPosts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT \'available\'');
+                } catch (e) { console.log("Postgres Migration Info: listing status column check."); }
+
+                try {
                     await dbInterface.run('ALTER TABLE TradeTickets ADD COLUMN IF NOT EXISTS trade_id INTEGER');
                 } catch (e) { console.log("Postgres Migration Info: ticket trade_id column check."); }
 
@@ -310,6 +315,7 @@ const initDB = async () => {
                         value DECIMAL(18, 2) NOT NULL,
                         category TEXT,
                         tags TEXT,
+                        status TEXT DEFAULT 'available',
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     );
@@ -439,6 +445,7 @@ const initDB = async () => {
                     'ALTER TABLE Messages ADD COLUMN type TEXT DEFAULT "user"',
                     'ALTER TABLE Messages ADD COLUMN trade_id INTEGER',
                     'ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"',
+                    'ALTER TABLE ItemPosts ADD COLUMN status TEXT DEFAULT "available"',
                     'ALTER TABLE TradeTickets ADD COLUMN trade_id INTEGER',
                     'CREATE TABLE IF NOT EXISTS TradeLogs (log_id INTEGER PRIMARY KEY AUTOINCREMENT, trade_id INTEGER, event TEXT, details TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'
                 ];

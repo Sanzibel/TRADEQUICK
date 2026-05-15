@@ -1,18 +1,23 @@
 import React from 'react';
 
 const ItemCard = ({ item, isBookmarked, onTrade, onMessage, onBookmark }) => {
+  const status = item.status || 'available';
+  const disabled = status !== 'available';
+  const label = status === 'sold_out' ? 'Sold Out' : status === 'pending' ? 'Pending' : '';
+
   return (
-    <div className="item-card">
+    <div className={`item-card ${disabled ? 'item-card-disabled' : ''}`}>
       <div className="item-image-container">
         <span className="game-label">{item.game}</span>
+        {disabled && <span className={`item-status-badge status-${status}`}>{label}</span>}
         <img src={item.image || 'https://via.placeholder.com/150'} alt={item.name} className="item-image" />
-        <button 
-          className={`bookmark-btn ${isBookmarked ? 'active' : ''}`} 
+        <button
+          className={`bookmark-btn ${isBookmarked ? 'active' : ''}`}
           onClick={onBookmark}
-          style={{ 
-            position: 'absolute', 
-            top: '10px', 
-            right: '10px', 
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
             color: isBookmarked ? 'var(--gold)' : 'white',
             fontSize: '1.5rem',
             background: 'rgba(0,0,0,0.5)',
@@ -24,15 +29,21 @@ const ItemCard = ({ item, isBookmarked, onTrade, onMessage, onBookmark }) => {
             alignItems: 'center'
           }}
         >
-          {isBookmarked ? '★' : '☆'}
+          {isBookmarked ? '*' : '+'}
         </button>
       </div>
       <div className="item-details">
         <h4 className="item-name">{item.name}</h4>
         <p className="item-value">Est. Value: ${item.value}</p>
         <div className="item-actions">
-          <button className="btn-trade" onClick={() => onTrade(item)}>Trade</button>
-          <button className="btn-message" onClick={() => onMessage(item)}>💬</button>
+          {disabled ? (
+            <button className="btn-trade" disabled>{label}</button>
+          ) : (
+            <>
+              <button className="btn-trade" onClick={() => onTrade(item)}>Trade</button>
+              <button className="btn-message" onClick={() => onMessage(item)}>Chat</button>
+            </>
+          )}
         </div>
       </div>
     </div>

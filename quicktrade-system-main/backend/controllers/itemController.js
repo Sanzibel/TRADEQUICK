@@ -10,8 +10,8 @@ exports.postItem = async (req, res) => {
     }
     
     const result = await db.run(
-      'INSERT INTO ItemPosts (user_id, name, game, description, value, category, tags, screenshot_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, name.trim(), game.trim(), description || null, Number(value), category || null, tags || null, screenshot_url || null]
+      'INSERT INTO ItemPosts (user_id, name, game, description, value, category, tags, screenshot_url, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [user_id, name.trim(), game.trim(), description || null, Number(value), category || null, tags || null, screenshot_url || null, 'available']
     );
 
     res.status(201).json({ message: "Item posted successfully", post_id: result.lastID });
@@ -24,7 +24,7 @@ exports.postItem = async (req, res) => {
 exports.getItems = async (req, res) => {
   try {
     const db = await sql.getDB();
-    const items = await db.all('SELECT * FROM ItemPosts ORDER BY post_id DESC');
+    const items = await db.all("SELECT *, COALESCE(status, 'available') AS status FROM ItemPosts ORDER BY post_id DESC");
     res.json(items);
   } catch (err) {
     console.error(err);
@@ -84,7 +84,7 @@ exports.getUserListings = async (req, res) => {
   try {
     const { user_id } = req.params;
     const db = await sql.getDB();
-    const listings = await db.all('SELECT * FROM ItemPosts WHERE user_id = ? ORDER BY created_at DESC', [Number(user_id)]);
+    const listings = await db.all("SELECT *, COALESCE(status, 'available') AS status FROM ItemPosts WHERE user_id = ? ORDER BY created_at DESC", [Number(user_id)]);
     res.json(listings);
   } catch (err) {
     console.error(err);

@@ -108,6 +108,15 @@
   box-shadow: 0 5px 15px rgba(212, 175, 55, 0.2);
 }
 
+.item-card-disabled {
+  opacity: 0.72;
+}
+
+.item-card-disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .item-image-container {
   height: 180px;
   background-color: #0a0a0a;
@@ -133,6 +142,25 @@
   border-radius: 4px;
   font-size: 0.7rem;
   font-weight: bold;
+}
+
+.item-status-badge {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: #ff4444;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.status-pending {
+  background: #b8860b;
+  color: #111;
 }
 
 .item-details {
@@ -169,6 +197,13 @@
   border-radius: 6px;
   font-weight: bold;
   text-align: center;
+}
+
+.btn-trade:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+  background: #555;
+  color: #ddd;
 }
 
 .btn-message {

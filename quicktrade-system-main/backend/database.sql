@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS ItemPosts (
   value DECIMAL(18, 2) NOT NULL,
   category TEXT,
   tags TEXT,
+  status TEXT DEFAULT 'available',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(user_id)
 );

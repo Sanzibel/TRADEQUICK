@@ -18,13 +18,21 @@ const TradeModal = ({ isOpen, onClose, item, user, token }) => {
   const fetchListings = async () => {
     try {
       const res = await axios.get(`/api/items/listings/${user.user_id}`);
-      setListings(res.data);
+      setListings(res.data.filter(listing => (listing.status || 'available') === 'available'));
     } catch (err) {
       console.error("Failed to fetch listings:", err);
     }
   };
 
   const handleSendOffer = async () => {
+    if (item.status === 'sold_out') {
+      toast.error("This item is already sold out.");
+      return;
+    }
+    if (item.status === 'pending') {
+      toast.error("This item is currently pending in another trade.");
+      return;
+    }
     if (!selectedOfferItem) {
       toast.error("Please select an item from your listings to offer!");
       return;

@@ -107,6 +107,17 @@ const addTradeMessage = async (db, ticket, content, type = "system") => {
   );
 };
 
+const setTicketTradeListingsStatus = async (db, ticket, status) => {
+  if (!ticket.trade_id) return;
+  const trade = await db.get('SELECT item_offered, item_requested FROM Trades WHERE trade_id = ?', [Number(ticket.trade_id)]);
+  if (!trade) return;
+
+  await db.run(
+    'UPDATE ItemPosts SET status = ? WHERE post_id IN (?, ?)',
+    [status, trade.item_offered, trade.item_requested]
+  );
+};
+
 const setTicketStatus = async (db, ticket, newStatus, changedBy, note) => {
   if (!VALID_STATUSES.includes(newStatus)) {
     throw new Error("Invalid ticket status");
@@ -599,6 +610,7 @@ exports.completeTicket = async (req, res) => {
     if (ticket.trade_id) {
       await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["completed", "confirmed", ticket.trade_id]);
     }
+    await setTicketTradeListingsStatus(db, ticket, "sold_out");
     await addTradeMessage(db, ticket, "Trade has been completed.", "system");
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
@@ -623,6 +635,7 @@ exports.cancelTicket = async (req, res) => {
     if (ticket.trade_id) {
       await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["cancelled", "cancelled", ticket.trade_id]);
     }
+    await setTicketTradeListingsStatus(db, ticket, "available");
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
   } catch (err) {
@@ -703,6 +716,7 @@ exports.deleteTicket = async (req, res) => {
 
     if (ticket.trade_id) {
       await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["cancelled", "cancelled", ticket.trade_id]);
+      await setTicketTradeListingsStatus(db, ticket, "available");
     }
 
     res.json({ message: "Ticket deleted" });

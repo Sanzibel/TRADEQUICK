@@ -91,7 +91,8 @@ export default function Home() {
         game: item.game,
         category: item.category || "Skins",
         value: Number(item.value), // Ensure value is a number
-        image: item.screenshot_url || "https://via.placeholder.com/150"
+        image: item.screenshot_url || "https://via.placeholder.com/150",
+        status: item.status || 'available'
       })) : [];
 
       setItems(dbItems);
@@ -137,6 +138,14 @@ export default function Home() {
   };
 
   const handleTrade = (item) => {
+    if (item.status === 'sold_out') {
+      toast.error("This item is already sold out.");
+      return;
+    }
+    if (item.status === 'pending') {
+      toast.error("This item is currently pending in another trade.");
+      return;
+    }
     if (!token) {
       toast.error("Please login to trade!");
       return;
