@@ -119,6 +119,9 @@ const initDB = async () => {
                         user1_id INTEGER NOT NULL,
                         user2_id INTEGER NOT NULL,
                         last_message TEXT,
+                        type TEXT DEFAULT 'direct',
+                        support_status TEXT DEFAULT 'Open',
+                        subject TEXT,
                         last_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user1_id) REFERENCES users(user_id),
                         FOREIGN KEY (user2_id) REFERENCES users(user_id)
@@ -256,6 +259,12 @@ const initDB = async () => {
                 } catch (e) { console.log("Postgres Migration Info: listing status column check."); }
 
                 try {
+                    await dbInterface.run('ALTER TABLE Conversations ADD COLUMN IF NOT EXISTS type TEXT DEFAULT \'direct\'');
+                    await dbInterface.run('ALTER TABLE Conversations ADD COLUMN IF NOT EXISTS support_status TEXT DEFAULT \'Open\'');
+                    await dbInterface.run('ALTER TABLE Conversations ADD COLUMN IF NOT EXISTS subject TEXT');
+                } catch (e) { console.log("Postgres Migration Info: support conversation columns check."); }
+
+                try {
                     await dbInterface.run('ALTER TABLE TradeTickets ADD COLUMN IF NOT EXISTS trade_id INTEGER');
                 } catch (e) { console.log("Postgres Migration Info: ticket trade_id column check."); }
 
@@ -339,6 +348,9 @@ const initDB = async () => {
                         user1_id INTEGER NOT NULL,
                         user2_id INTEGER NOT NULL,
                         last_message TEXT,
+                        type TEXT DEFAULT 'direct',
+                        support_status TEXT DEFAULT 'Open',
+                        subject TEXT,
                         last_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user1_id) REFERENCES users(user_id),
                         FOREIGN KEY (user2_id) REFERENCES users(user_id)
@@ -446,6 +458,9 @@ const initDB = async () => {
                     'ALTER TABLE Messages ADD COLUMN trade_id INTEGER',
                     'ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"',
                     'ALTER TABLE ItemPosts ADD COLUMN status TEXT DEFAULT "available"',
+                    'ALTER TABLE Conversations ADD COLUMN type TEXT DEFAULT "direct"',
+                    'ALTER TABLE Conversations ADD COLUMN support_status TEXT DEFAULT "Open"',
+                    'ALTER TABLE Conversations ADD COLUMN subject TEXT',
                     'ALTER TABLE TradeTickets ADD COLUMN trade_id INTEGER',
                     'CREATE TABLE IF NOT EXISTS TradeLogs (log_id INTEGER PRIMARY KEY AUTOINCREMENT, trade_id INTEGER, event TEXT, details TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'
                 ];

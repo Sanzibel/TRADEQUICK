@@ -3,12 +3,14 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
+import ChatBox from '../components/ChatBox';
 import { confirmToast, toast } from '../utils/notifications.jsx';
 import './tickets.css';
 
 export default function Admin() {
   const navigate = useNavigate();
   const [token] = useState(localStorage.getItem("token"));
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [user] = useState(() => {
     try {
       const savedUser = localStorage.getItem("user");
@@ -417,6 +419,26 @@ export default function Admin() {
       </main>
 
       <Footer />
+      <button
+        onClick={() => setIsChatOpen(!isChatOpen)}
+        style={{
+          position: 'fixed',
+          bottom: '80px',
+          right: '20px',
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          backgroundColor: 'var(--gold)',
+          color: 'var(--black)',
+          border: 'none',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          zIndex: 1000
+        }}
+      >
+        MSG
+      </button>
+      <ChatBox isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} user={user} />
     </div>
   );
 }

@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS Conversations (
   user1_id INTEGER NOT NULL,
   user2_id INTEGER NOT NULL,
   last_message TEXT,
+  type TEXT DEFAULT 'direct',
+  support_status TEXT DEFAULT 'Open',
+  subject TEXT,
   last_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user1_id) REFERENCES users(user_id),
   FOREIGN KEY (user2_id) REFERENCES users(user_id)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import './profile.css';
 import TopBar from '../components/TopBar';
@@ -39,14 +39,32 @@ export default function Profile() {
     email_notifications: localStorage.getItem('email_notifications') !== 'false'
   }));
   const [savingSettings, setSavingSettings] = useState(false);
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [supportForm, setSupportForm] = useState({
+    category: 'Account Issues',
+    content: '',
+    attachment_url: '',
+    attachment_name: '',
+    attachment_type: ''
+  });
+  const [supportReply, setSupportReply] = useState({});
+  const [supportLoading, setSupportLoading] = useState(false);
+  const supportMessageCountRef = useRef(0);
 
   useEffect(() => {
     if (user) {
       if (activeTab === 'favorites') fetchFavorites();
       if (activeTab === 'listings') fetchListings();
       if (activeTab === 'history') fetchTrades();
+      if (activeTab === 'support') fetchSupportTickets();
     }
   }, [user, activeTab]);
+
+  useEffect(() => {
+    if (!user || activeTab !== 'support') return;
+    const interval = setInterval(fetchSupportTickets, 5000);
+    return () => clearInterval(interval);
+  }, [user?.user_id, activeTab]);
 
   const fetchTrades = async () => {
      setLoading(true);
@@ -173,6 +191,91 @@ export default function Profile() {
       toast.error(err.response?.data?.error || "Failed to save settings.");
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const fetchSupportTickets = async (notify = true) => {
+    if (!user?.user_id) return;
+    try {
+      const res = await axios.get(`/api/messages/support/user/${user.user_id}`);
+      const tickets = Array.isArray(res.data) ? res.data : [];
+      const messageCount = tickets.reduce((total, ticket) => total + (ticket.messages?.length || 0), 0);
+      if (notify && supportMessageCountRef.current && messageCount > supportMessageCountRef.current) {
+        toast.success("Support replied to your ticket.");
+      }
+      supportMessageCountRef.current = messageCount;
+      setSupportTickets(tickets);
+    } catch (err) {
+      console.error("Failed to fetch support tickets:", err);
+    }
+  };
+
+  const handleSupportFile = (file) => {
+    if (!file) return;
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowed.includes(file.type)) {
+      toast.error("Attachment must be an image or PDF.");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error("Attachment exceeds 3MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSupportForm(prev => ({
+        ...prev,
+        attachment_url: reader.result,
+        attachment_name: file.name,
+        attachment_type: file.type
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const submitSupportTicket = async (e) => {
+    e.preventDefault();
+    if (!supportForm.content.trim()) {
+      toast.error("Please describe your concern.");
+      return;
+    }
+
+    setSupportLoading(true);
+    try {
+      await axios.post('/api/messages/support', {
+        user_id: user.user_id,
+        ...supportForm
+      });
+      setSupportForm({
+        category: 'Account Issues',
+        content: '',
+        attachment_url: '',
+        attachment_name: '',
+        attachment_type: ''
+      });
+      await fetchSupportTickets(false);
+      toast.success("Support ticket submitted.");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to submit support ticket.");
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const sendSupportReply = async (convoId) => {
+    const content = supportReply[convoId]?.trim();
+    if (!content) return;
+
+    try {
+      await axios.post(`/api/messages/support/${convoId}/reply`, {
+        sender_id: user.user_id,
+        content
+      });
+      setSupportReply(prev => ({ ...prev, [convoId]: '' }));
+      await fetchSupportTickets(false);
+      toast.success("Reply sent.");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to send reply.");
     }
   };
 
@@ -443,19 +546,74 @@ export default function Profile() {
           {activeTab === 'support' && (
             <div className="support-section">
               <h3 className="gold-glow">Contact Support</h3>
-              <form className="support-form">
-                <select className="support-select">
+              <form className="support-form" onSubmit={submitSupportTicket}>
+                <select
+                  className="support-select"
+                  value={supportForm.category}
+                  onChange={(e) => setSupportForm({ ...supportForm, category: e.target.value })}
+                >
                   <option>Account Issues</option>
                   <option>Trade Disputes</option>
-                  <option>Billing / Credits</option>
+                  <option>Marketplace Listing</option>
                   <option>Technical Bug</option>
                 </select>
-                <textarea placeholder="Describe your issue..." className="support-textarea"></textarea>
-                <button type="button" className="btn-gold">Submit Ticket</button>
+                <textarea
+                  placeholder="Describe your issue..."
+                  className="support-textarea"
+                  value={supportForm.content}
+                  onChange={(e) => setSupportForm({ ...supportForm, content: e.target.value })}
+                />
+                <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" onChange={(e) => handleSupportFile(e.target.files[0])} />
+                {supportForm.attachment_url && (
+                  <div style={{ color: 'var(--gold)', fontSize: '0.85rem' }}>
+                    Attached: {supportForm.attachment_name}
+                    <button type="button" className="btn-outline-gold" style={{ marginLeft: '10px', padding: '6px 10px' }} onClick={() => setSupportForm({ ...supportForm, attachment_url: '', attachment_name: '', attachment_type: '' })}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+                <button type="submit" className="btn-gold" disabled={supportLoading}>{supportLoading ? 'Submitting...' : 'Submit Ticket'}</button>
               </form>
-              <div className="live-chat-box">
-                <p>Live Chat: <span className="status-completed">Online</span></p>
-                <button className="btn-outline-gold">Start Chat</button>
+
+              <div className="support-thread-list">
+                <h4 className="gold-glow">My Support Tickets</h4>
+                {supportTickets.length > 0 ? supportTickets.map(ticket => (
+                  <div className="support-ticket-card" key={ticket.convo_id}>
+                    <div className="support-ticket-header">
+                      <div>
+                        <strong>{ticket.subject}</strong>
+                        <p>Ticket #{ticket.convo_id} / {new Date(ticket.last_timestamp).toLocaleString()}</p>
+                      </div>
+                      <span>{ticket.support_status}</span>
+                    </div>
+                    <div className="support-message-list">
+                      {ticket.messages?.map(message => (
+                        <div key={message.msg_id} className={`support-message ${Number(message.sender_id) === Number(user.user_id) ? 'mine' : 'theirs'}`}>
+                          <small>{message.sender_name} / {new Date(message.timestamp).toLocaleString()}</small>
+                          {message.type === 'image' ? (
+                            <img src={message.content} alt="Support attachment" />
+                          ) : message.type === 'file' ? (
+                            <a href={message.content} target="_blank" rel="noreferrer" className="btn-outline-gold">Open Attachment</a>
+                          ) : (
+                            <p>{message.content}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {!['Resolved', 'Closed'].includes(ticket.support_status) && (
+                      <div className="support-reply-row">
+                        <input
+                          value={supportReply[ticket.convo_id] || ''}
+                          onChange={(e) => setSupportReply({ ...supportReply, [ticket.convo_id]: e.target.value })}
+                          placeholder="Reply to support..."
+                        />
+                        <button className="btn-gold" onClick={() => sendSupportReply(ticket.convo_id)}>Reply</button>
+                      </div>
+                    )}
+                  </div>
+                )) : (
+                  <p style={{ color: 'var(--text-gray)' }}>No support tickets yet.</p>
+                )}
               </div>
             </div>
           )}

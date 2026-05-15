@@ -1,27 +1,59 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from '../utils/notifications.jsx';
 
 const ChatBox = ({ isOpen, onClose, user }) => {
   const [activeTab, setActiveTab] = useState('trades'); // 'messages' or 'trades'
   const [trades, setTrades] = useState([]);
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const [replyText, setReplyText] = useState('');
   const [loading, setLoading] = useState(false);
+  const previousTicketCountRef = useRef(0);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (isOpen && user) {
       fetchUserTrades();
+      fetchSupportTickets();
     }
-  }, [isOpen, user]);
+  }, [isOpen, user?.user_id, user?.role]);
 
-  const fetchUserTrades = async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    const interval = setInterval(() => {
+      if (activeTab === 'trades') fetchUserTrades(false);
+      fetchSupportTickets(true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isOpen, user?.user_id, user?.role, activeTab]);
+
+  const fetchUserTrades = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await axios.get(`/api/trades/user/${user.user_id}`);
       setTrades(res.data);
     } catch (err) {
       console.error("Failed to fetch trades:", err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+    }
+  };
+
+  const fetchSupportTickets = async (notify = false) => {
+    if (!user) return;
+    try {
+      const url = isAdmin ? '/api/messages/support/admin' : `/api/messages/support/user/${user.user_id}`;
+      const res = await axios.get(url);
+      const tickets = Array.isArray(res.data) ? res.data : [];
+      if (notify && isAdmin && previousTicketCountRef.current && tickets.length > previousTicketCountRef.current) {
+        toast.success('New support ticket received.');
+      }
+      previousTicketCountRef.current = tickets.length;
+      setSupportTickets(tickets);
+      if (!selectedTicketId && tickets[0]) setSelectedTicketId(tickets[0].convo_id);
+    } catch (err) {
+      console.error("Failed to fetch support tickets:", err);
     }
   };
 
@@ -36,6 +68,37 @@ const ChatBox = ({ isOpen, onClose, user }) => {
     } catch (err) {
       console.error("Respond error:", err);
       toast.error("Failed to process trade.");
+    }
+  };
+
+  const selectedTicket = supportTickets.find(ticket => Number(ticket.convo_id) === Number(selectedTicketId));
+
+  const handleSendReply = async () => {
+    if (!selectedTicket || !replyText.trim()) return;
+    try {
+      const res = await axios.post(`/api/messages/support/${selectedTicket.convo_id}/reply`, {
+        sender_id: user.user_id,
+        content: replyText
+      });
+      setReplyText('');
+      setSupportTickets(prev => prev.map(ticket => Number(ticket.convo_id) === Number(res.data.convo_id) ? res.data : ticket));
+      toast.success(isAdmin ? 'Reply sent to user.' : 'Reply sent to support.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to send reply.');
+    }
+  };
+
+  const handleStatusChange = async (status) => {
+    if (!selectedTicket) return;
+    try {
+      const res = await axios.patch(`/api/messages/support/${selectedTicket.convo_id}/status`, {
+        status,
+        actor_user_id: user.user_id
+      });
+      setSupportTickets(prev => prev.map(ticket => Number(ticket.convo_id) === Number(res.data.convo_id) ? res.data : ticket));
+      toast.success(`Ticket marked ${status}.`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update status.');
     }
   };
 
@@ -173,14 +236,84 @@ const ChatBox = ({ isOpen, onClose, user }) => {
           ) : (
             <p style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>No active trades found.</p>
           )
+        ) : isAdmin ? (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {supportTickets.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>No support messages yet.</p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
+                  {supportTickets.map(ticket => (
+                    <button
+                      key={ticket.convo_id}
+                      onClick={() => setSelectedTicketId(ticket.convo_id)}
+                      style={{
+                        minWidth: '150px',
+                        textAlign: 'left',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: Number(selectedTicketId) === Number(ticket.convo_id) ? '1px solid var(--gold)' : '1px solid #333',
+                        background: '#111',
+                        color: '#eee'
+                      }}
+                    >
+                      <div style={{ color: 'var(--gold)', fontSize: '0.75rem' }}>#{ticket.convo_id} / {ticket.support_status}</div>
+                      <div style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ticket.user_name}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedTicket && (
+                  <div style={{ background: '#111', border: '1px solid #333', borderRadius: '10px', padding: '12px' }}>
+                    <div style={{ marginBottom: '10px', fontSize: '0.82rem', color: '#bbb' }}>
+                      <strong style={{ color: 'var(--gold)' }}>{selectedTicket.subject}</strong>
+                      <div>User: {selectedTicket.user_name} / ID {selectedTicket.user1_id}</div>
+                      <div>Updated: {new Date(selectedTicket.last_timestamp).toLocaleString()}</div>
+                    </div>
+
+                    <select
+                      value={selectedTicket.support_status}
+                      onChange={(e) => handleStatusChange(e.target.value)}
+                      style={{ width: '100%', marginBottom: '10px', padding: '8px', background: '#0a0a0a', color: '#fff', border: '1px solid #444', borderRadius: '6px' }}
+                    >
+                      {['Open', 'Pending', 'Resolved', 'Closed'].map(status => <option key={status}>{status}</option>)}
+                    </select>
+
+                    <div style={{ display: 'grid', gap: '8px', maxHeight: '210px', overflowY: 'auto', marginBottom: '10px' }}>
+                      {selectedTicket.messages?.map(message => (
+                        <div key={message.msg_id} style={{ padding: '8px', borderRadius: '8px', background: Number(message.sender_id) === Number(user.user_id) ? 'rgba(212,175,55,0.18)' : '#1b1b1b' }}>
+                          <div style={{ color: 'var(--gold)', fontSize: '0.72rem', marginBottom: '4px' }}>{message.sender_name} / {new Date(message.timestamp).toLocaleString()}</div>
+                          {message.type === 'image' ? (
+                            <img src={message.content} alt="Support attachment" style={{ maxWidth: '100%', borderRadius: '6px' }} />
+                          ) : message.type === 'file' ? (
+                            <a href={message.content} target="_blank" rel="noreferrer" className="btn-outline-gold">Open Attachment</a>
+                          ) : (
+                            <div style={{ color: '#eee', whiteSpace: 'pre-wrap' }}>{message.content}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Reply to this support ticket..."
+                      style={{ width: '100%', minHeight: '70px', background: '#0a0a0a', color: '#fff', border: '1px solid #444', borderRadius: '6px', padding: '10px', resize: 'vertical' }}
+                    />
+                    <button className="btn-gold" style={{ width: '100%', marginTop: '8px' }} onClick={handleSendReply}>Send Reply</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         ) : (
-          <p style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>Messaging feature coming soon...</p>
+          <p style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>Support replies appear in Profile &gt; Help &amp; Support.</p>
         )}
       </div>
 
       {/* Footer */}
       <div style={{ padding: '10px', borderTop: '1px solid #333', textAlign: 'center' }}>
-        <button className="btn-gold" style={{ width: '100%', fontSize: '0.8rem' }} onClick={fetchUserTrades}>
+        <button className="btn-gold" style={{ width: '100%', fontSize: '0.8rem' }} onClick={() => activeTab === 'messages' ? fetchSupportTickets() : fetchUserTrades()}>
           Refresh Activity
         </button>
       </div>

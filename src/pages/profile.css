@@ -142,13 +142,95 @@
   resize: none;
 }
 
-.live-chat-box {
+.support-thread-list {
   margin-top: 30px;
   padding-top: 20px;
   border-top: 1px solid #333;
+}
+
+.support-thread-list h4 {
+  margin-bottom: 16px;
+}
+
+.support-ticket-card {
+  background: var(--black);
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.support-ticket-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.support-ticket-header p {
+  color: var(--text-gray);
+  font-size: 0.78rem;
+  margin-top: 4px;
+}
+
+.support-ticket-header span {
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.support-message-list {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.support-message {
+  padding: 10px;
+  border-radius: 8px;
+  background: #111;
+  border: 1px solid #222;
+}
+
+.support-message.mine {
+  background: rgba(212, 175, 55, 0.12);
+}
+
+.support-message small {
+  display: block;
+  color: var(--gold);
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+}
+
+.support-message p {
+  white-space: pre-wrap;
+}
+
+.support-message img {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.support-reply-row {
+  display: flex;
+  gap: 10px;
+}
+
+.support-reply-row input {
+  flex: 1;
+  padding: 12px;
+  background-color: var(--black-light);
+  border: 1px solid #444;
+  color: white;
+  border-radius: 8px;
 }
 
 /* Responsive Design */
