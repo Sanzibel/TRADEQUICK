@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
@@ -16,6 +16,7 @@ const EMPTY_ARRAY = [];
 export default function EscrowRoom() {
   const { tradeId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const chatContainerRef = useRef(null);
   const chatEndRef = useRef(null);
   const pollingRef = useRef(null);
@@ -67,6 +68,12 @@ export default function EscrowRoom() {
   const logs = ticketPayload?.logs || EMPTY_ARRAY;
   const payment = ticketPayload?.payment || { status: 'not_requested' };
   const roomStatus = ticket?.status || trade?.status || 'active';
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const isViewOnly = searchParams.get('mode') === 'view'
+    || searchParams.get('viewOnly') === 'true'
+    || location.state?.viewOnly === true;
+  const isClosedRoom = ['Completed', 'Cancelled', 'completed', 'cancelled'].includes(roomStatus);
+  const canInteract = !isViewOnly && !isClosedRoom;
 
   const mySubmission = useMemo(() => {
     return items.find(item => Number(item.user_id) === userId);
@@ -85,7 +92,7 @@ export default function EscrowRoom() {
 
   const isParticipant = ['creator', 'joiner'].includes(ticketRole);
   const isMiddleman = ticketRole === 'middleman';
-  const canManageMiddleman = isAdmin || isMiddleman;
+  const canManageMiddleman = canInteract && (isAdmin || isMiddleman);
 
   useEffect(() => {
     if (!token || !user) {
@@ -141,10 +148,6 @@ export default function EscrowRoom() {
     try {
       const res = await axios.get(`/api/tickets/trade/${tradeId}`);
       setTicketPayload(res.data);
-      if (res.data?.ticket?.status === 'Completed') {
-        localStorage.setItem('quicktrade_trade_completed', 'Trade has been completed.');
-        navigate('/', { replace: true });
-      }
     } catch (err) {
       console.error('Failed to fetch middleman room:', err);
     }
@@ -228,7 +231,7 @@ export default function EscrowRoom() {
   }
 
   async function handleAILogic(dbMessages) {
-    if (isProcessingAIRef.current || !trade) return;
+    if (isProcessingAIRef.current || !trade || !canInteract) return;
 
     const currentDetail = trade.status_detail || 'initial';
     const humanMessages = dbMessages.filter(m => !m.isAI && !m.isSystem);
@@ -288,6 +291,7 @@ export default function EscrowRoom() {
   };
 
   const readChatImage = (file) => {
+    if (!canInteract) return;
     if (!file) return;
     const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowed.includes(file.type)) {
@@ -307,6 +311,7 @@ export default function EscrowRoom() {
   };
 
   const readReceiptFile = (file) => {
+    if (!canInteract) return;
     if (!file) return;
     const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowed.includes(file.type)) {
@@ -326,6 +331,7 @@ export default function EscrowRoom() {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
+    if (!canInteract) return;
     if ((!newMessage.trim() && !chatImage) || !trade || sendingMessage) return;
 
     const offererId = Number(trade.offerer_user_id);
@@ -369,6 +375,7 @@ export default function EscrowRoom() {
 
   const submitItem = async (e) => {
     e.preventDefault();
+    if (!canInteract) return;
     if (!ticket) return;
     if (!itemForm.post_id) {
       toast.error('Select one of your listed items first.');
@@ -388,6 +395,7 @@ export default function EscrowRoom() {
   };
 
   const assignMiddleman = async () => {
+    if (!canInteract) return;
     if (!ticket) return;
     try {
       const res = await axios.post(`/api/tickets/${ticket.ticket_code}/assign-middleman`, {
@@ -402,6 +410,7 @@ export default function EscrowRoom() {
   };
 
   const performAction = async (action) => {
+    if (!canInteract) return;
     if (!ticket) return;
     try {
       const res = await axios.post(`/api/tickets/${ticket.ticket_code}/middleman-action`, {
@@ -420,6 +429,7 @@ export default function EscrowRoom() {
   };
 
   const requestPayment = async () => {
+    if (!canInteract) return;
     if (!ticket || paymentBusy) return;
     setPaymentBusy(true);
     try {
@@ -437,6 +447,7 @@ export default function EscrowRoom() {
   };
 
   const submitReceipt = async () => {
+    if (!canInteract) return;
     if (!ticket || paymentBusy) return;
     if (!receiptFile.url) {
       toast.error('Upload a receipt first.');
@@ -461,6 +472,7 @@ export default function EscrowRoom() {
   };
 
   const completePayment = async () => {
+    if (!canInteract) return;
     if (!ticket || paymentBusy) return;
     setPaymentBusy(true);
     try {
@@ -478,6 +490,7 @@ export default function EscrowRoom() {
   };
 
   const completeTicket = async () => {
+    if (!canInteract) return;
     if (!ticket) return;
     try {
       const res = await axios.post(`/api/tickets/${ticket.ticket_code}/complete`, {
@@ -496,6 +509,7 @@ export default function EscrowRoom() {
   };
 
   const cancelTicket = async () => {
+    if (!canInteract) return;
     if (!ticket) return;
     const confirmed = await confirmToast('Cancel this trade?', { confirmLabel: 'Cancel Trade' });
     if (!confirmed) return;
@@ -543,6 +557,7 @@ export default function EscrowRoom() {
           <div>
             <span style={{ color: 'var(--gold)', fontWeight: 'bold' }}>TRADE ID:</span> #{tradeId}
             <span style={{ color: '#777', marginLeft: '14px' }}>Escrow Room</span>
+            {isViewOnly && <span style={{ color: '#44ff88', marginLeft: '14px', fontSize: '0.78rem', letterSpacing: '1px' }}>VIEW ONLY</span>}
           </div>
           <div style={{ display: 'flex', gap: '20px', fontSize: '0.8rem', flexWrap: 'wrap' }}>
             <span>STATUS: <span style={{ color: 'var(--gold)' }}>{String(roomStatus).toUpperCase()}</span></span>
@@ -581,7 +596,7 @@ export default function EscrowRoom() {
               </div>
             </div>
 
-            {tradeLink && (
+            {tradeLink && canInteract && (
               <div style={{
                 backgroundColor: 'rgba(212, 175, 55, 0.05)',
                 border: '1px solid var(--gold)',
@@ -636,7 +651,7 @@ export default function EscrowRoom() {
                 <div ref={chatEndRef} />
               </div>
 
-              {chatImage && (
+              {chatImage && canInteract && (
                 <div style={{ padding: '12px 20px', borderTop: '1px solid #222', backgroundColor: '#0d0d0d' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <img src={chatImage} alt="Chat preview" style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--gold)' }} />
@@ -646,29 +661,31 @@ export default function EscrowRoom() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} style={{ padding: '20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', backgroundColor: '#0d0d0d', alignItems: 'center' }}>
-                <label className="btn-outline-gold" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  Image
-                  <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(e) => readChatImage(e.target.files[0])} style={{ display: 'none' }} />
-                </label>
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={isAdmin && !isParticipant ? 'Join the active trade chat as admin...' : 'Message the other trader...'}
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#151515',
-                    border: '1px solid #333',
-                    color: '#fff',
-                    outline: 'none',
-                    fontSize: '1rem',
-                    padding: '12px 15px',
-                    borderRadius: '6px'
-                  }}
-                />
-                <button type="submit" className="btn-gold" disabled={sendingMessage}>{sendingMessage ? 'Sending...' : 'Send'}</button>
-              </form>
+              {canInteract && (
+                <form onSubmit={handleSendMessage} style={{ padding: '20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', backgroundColor: '#0d0d0d', alignItems: 'center' }}>
+                  <label className="btn-outline-gold" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Image
+                    <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(e) => readChatImage(e.target.files[0])} style={{ display: 'none' }} />
+                  </label>
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder={isAdmin && !isParticipant ? 'Join the active trade chat as admin...' : 'Message the other trader...'}
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#151515',
+                      border: '1px solid #333',
+                      color: '#fff',
+                      outline: 'none',
+                      fontSize: '1rem',
+                      padding: '12px 15px',
+                      borderRadius: '6px'
+                    }}
+                  />
+                  <button type="submit" className="btn-gold" disabled={sendingMessage}>{sendingMessage ? 'Sending...' : 'Send'}</button>
+                </form>
+              )}
             </div>
           </div>
 
@@ -680,7 +697,7 @@ export default function EscrowRoom() {
                 {payment.transaction_id && <div><strong style={{ color: '#fff' }}>Transaction:</strong> {payment.transaction_id}</div>}
               </div>
 
-              {canManageMiddleman && ticket?.middleman_user_id && !payment.complete && (
+              {canInteract && canManageMiddleman && ticket?.middleman_user_id && !payment.complete && (
                 <div className="ticket-form compact">
                   <label style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>Payment Method</label>
                   <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}>
@@ -715,7 +732,7 @@ export default function EscrowRoom() {
                 </div>
               )}
 
-              {isParticipant && payment.request && !payment.complete && (
+              {canInteract && isParticipant && payment.request && !payment.complete && (
                 <div className="ticket-form compact">
                   <p className="muted">Upload your payment receipt for middleman review. Images and PDFs are accepted.</p>
                   <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" onChange={(e) => readReceiptFile(e.target.files[0])} />
@@ -736,7 +753,7 @@ export default function EscrowRoom() {
                 </div>
               )}
 
-              {canManageMiddleman && payment.receipt && !payment.complete && (
+              {canInteract && canManageMiddleman && payment.receipt && !payment.complete && (
                 <button className="btn-gold" onClick={completePayment} disabled={paymentBusy}>
                   {paymentBusy ? 'Confirming...' : 'Mark Payment Complete'}
                 </button>
@@ -755,7 +772,7 @@ export default function EscrowRoom() {
                 <div><strong style={{ color: '#fff' }}>Status:</strong> {roomStatus}</div>
               </div>
 
-              {!ticket?.middleman_user_id && isAdmin && (
+              {canInteract && !ticket?.middleman_user_id && isAdmin && (
                 <div className="ticket-form compact" style={{ marginBottom: '16px' }}>
                   <p className="muted">Admins can join this active trade as the assigned middleman.</p>
                   <input value={middlemanId} onChange={(e) => setMiddlemanId(e.target.value)} placeholder={`Middleman user ID (${userId})`} />
@@ -763,7 +780,7 @@ export default function EscrowRoom() {
                 </div>
               )}
 
-              {canManageMiddleman && ticket?.middleman_user_id ? (
+              {canInteract && canManageMiddleman && ticket?.middleman_user_id ? (
                 <div className="ticket-form compact">
                   <textarea placeholder="Action note" value={actionNote} onChange={(e) => setActionNote(e.target.value)} />
                   <input type="file" accept="image/*" onChange={(e) => readFileAsDataUrl(e.target.files[0], setActionEvidence)} />
@@ -778,7 +795,9 @@ export default function EscrowRoom() {
                 </div>
               ) : (
                 <p className="muted" style={{ fontSize: '0.82rem' }}>
-                  {isAdmin ? 'Join as middleman to use trade handling actions.' : 'An admin middleman can join this room during the active trade.'}
+                  {canInteract
+                    ? (isAdmin ? 'Join as middleman to use trade handling actions.' : 'An admin middleman can join this room during the active trade.')
+                    : 'This transaction is available for review only.'}
                 </p>
               )}
             </section>
@@ -807,7 +826,7 @@ export default function EscrowRoom() {
                 })}
               </div>
 
-              {isParticipant && !['Completed', 'Cancelled'].includes(ticket?.status) && (
+              {canInteract && isParticipant && !['Completed', 'Cancelled'].includes(ticket?.status) && (
                 <form className="ticket-form" onSubmit={submitItem}>
                   <h3>{mySubmission ? 'Update My Item' : 'Declare My Item'}</h3>
                   <select value={itemForm.post_id} onChange={(e) => setItemForm({ ...itemForm, post_id: e.target.value })} required>

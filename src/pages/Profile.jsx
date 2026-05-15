@@ -435,7 +435,7 @@ export default function Profile() {
                       borderRadius: '8px', padding: '20px', display: 'grid', 
                       gridTemplateColumns: '1fr 2fr 1fr', alignItems: 'center', gap: '20px',
                       transition: '0.3s', cursor: 'pointer'
-                    }} onClick={() => window.location.href = `/escrow/${trade.trade_id}`}>
+                    }} onClick={() => window.location.href = `/escrow/${trade.trade_id}?mode=view`}>
                       
                       <div style={{ borderRight: '1px solid #333', paddingRight: '20px' }}>
                         <div style={{ fontSize: '0.7rem', color: '#666' }}>ID: #{trade.trade_id}</div>
@@ -455,15 +455,6 @@ export default function Profile() {
                           <img src={trade.requested_item_image} style={{ width: '40px' }} alt="" />
                           <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '5px' }}>{trade.requested_item_name}</div>
                         </div>
-                      </div>
-
-                      <div style={{ textAlign: 'right' }}>
-                        <button 
-                          className="btn-gold" 
-                          style={{ padding: '8px 20px', fontSize: '0.8rem', letterSpacing: '1px' }}
-                        >
-                          OPEN TERMINAL
-                        </button>
                       </div>
                     </div>
                   ))
