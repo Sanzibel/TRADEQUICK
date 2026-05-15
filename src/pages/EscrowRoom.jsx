@@ -1,142 +1,192 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
+import { confirmToast, toast } from '../utils/notifications.jsx';
+import './tickets.css';
+
+const middlemanActions = [
+  { action: 'received_a', label: 'Received from Trader A' },
+  { action: 'verified_a', label: 'Verify Trader A Item' },
+  { action: 'received_b', label: 'Received from Trader B' },
+  { action: 'verified_b', label: 'Verify Trader B Item' }
+];
+
+const EMPTY_ARRAY = [];
 
 export default function EscrowRoom() {
   const { tradeId } = useParams();
   const navigate = useNavigate();
-  const [trade, setTrade] = useState(null);
-  const [token] = useState(localStorage.getItem("token"));
-  const [user] = useState(() => {
-    try {
-      const savedUser = localStorage.getItem("user");
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch (e) { return null; }
-  });
-
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [tradeLink, setTradeLink] = useState(null);
-  const [loading, setLoading] = useState(true);
   const chatEndRef = useRef(null);
   const pollingRef = useRef(null);
   const isProcessingAIRef = useRef(false);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const [token] = useState(localStorage.getItem('token'));
+  const [user] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [trade, setTrade] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [tradeLink, setTradeLink] = useState(null);
+  const [ticketPayload, setTicketPayload] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [itemForm, setItemForm] = useState({
+    game_name: '',
+    item_name: '',
+    quantity: 1,
+    screenshot_url: '',
+    notes: ''
+  });
+  const [middlemanId, setMiddlemanId] = useState('');
+  const [actionEvidence, setActionEvidence] = useState('');
+  const [actionNote, setActionNote] = useState('');
+
+  const userId = Number(user?.user_id || user?.id);
+  const isAdmin = user?.role === 'admin';
+  const ticket = ticketPayload?.ticket;
+  const items = ticketPayload?.items || EMPTY_ARRAY;
+  const logs = ticketPayload?.logs || EMPTY_ARRAY;
+  const roomStatus = ticket?.status || trade?.status || 'active';
+
+  const mySubmission = useMemo(() => {
+    return items.find(item => Number(item.user_id) === userId);
+  }, [items, userId]);
+
+  const ticketRole = useMemo(() => {
+    if (!ticket || !userId) return 'viewer';
+    if (Number(ticket.creator_user_id) === userId) return 'creator';
+    if (Number(ticket.joiner_user_id) === userId) return 'joiner';
+    if (Number(ticket.middleman_user_id) === userId) return 'middleman';
+    if (isAdmin) return 'admin';
+    return 'viewer';
+  }, [ticket, userId, isAdmin]);
+
+  const isParticipant = ['creator', 'joiner'].includes(ticketRole);
+  const isMiddleman = ticketRole === 'middleman';
+  const canManageMiddleman = isAdmin || isMiddleman;
 
   useEffect(() => {
     if (!token || !user) {
       navigate('/login');
       return;
     }
-    
+
     const init = async () => {
       await fetchTradeDetails();
       await fetchMessages();
+      await fetchTradeTicket();
     };
-    
+
     init();
-    
-    pollingRef.current = setInterval(fetchMessages, 3000);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
+    pollingRef.current = setInterval(() => {
+      fetchMessages();
+      fetchTradeTicket();
+    }, 3000);
+
+    return () => clearInterval(pollingRef.current);
+  // The room id drives this polling lifecycle; fetch helpers read the latest state inside each tick.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeId]);
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const fetchTradeDetails = async () => {
+  async function fetchTradeDetails() {
     try {
-      const userId = user.user_id || user.id;
-      const res = await axios.get(`/api/trades/user/${userId}`);
-      const currentTrade = res.data.find(t => t.trade_id === parseInt(tradeId));
-      if (currentTrade) {
-        setTrade(currentTrade);
-      } else {
-        console.error("Trade not found in user trades list");
-      }
-      setLoading(false);
+      const res = await axios.get(`/api/trades/${tradeId}`);
+      setTrade(res.data);
     } catch (err) {
-      console.error("Failed to fetch trade details:", err);
+      console.error('Failed to fetch trade details:', err);
+    } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const updateTradeDetail = async (newDetail) => {
+  async function fetchTradeTicket() {
+    try {
+      const res = await axios.get(`/api/tickets/trade/${tradeId}`);
+      setTicketPayload(res.data);
+    } catch (err) {
+      console.error('Failed to fetch middleman room:', err);
+    }
+  }
+
+  async function updateTradeDetail(newDetail) {
     try {
       await axios.post('/api/trades/update-detail', {
         trade_id: tradeId,
         status_detail: newDetail
       });
-      // Update local state too
       setTrade(prev => ({ ...prev, status_detail: newDetail }));
     } catch (err) {
-      console.error("Failed to update trade detail:", err);
+      console.error('Failed to update trade detail:', err);
     }
-  };
+  }
 
-  const saveBotMessage = async (content, type = 'bot') => {
+  async function saveBotMessage(content, type = 'bot') {
     try {
       await axios.post('/api/messages/send', {
-        sender_id: 0, 
+        sender_id: 0,
         receiver_id: 0,
         trade_id: tradeId,
-        content: content,
-        type: type
+        content,
+        type
       });
       await fetchMessages();
     } catch (err) {
-      console.error("Bot message save error:", err);
+      console.error('Bot message save error:', err);
     }
-  };
+  }
 
-  const fetchMessages = async () => {
+  async function fetchMessages() {
     try {
       const res = await axios.get(`/api/messages/trade/${tradeId}`);
-      
       const dbMessages = res.data.map(m => ({
         id: m.msg_id,
         sender: m.sender_name,
         senderId: m.sender_id,
         content: m.content,
         timestamp: m.timestamp,
-        isUser: Number(m.sender_id) === Number(user?.user_id || user?.id),
+        isUser: Number(m.sender_id) === userId,
         isAI: Number(m.sender_id) === 0 || m.type === 'bot',
         isSystem: m.type === 'system'
       }));
 
-      const protocolHeader = [
-        { 
-          sender: 'SYSTEM', 
-          content: `SECURE TRADE CHANNEL: #${tradeId} [ACTIVE]`,
-          isSystem: true 
-        }
-      ];
-
-      setMessages([...protocolHeader, ...dbMessages]);
+      setMessages([
+        {
+          sender: 'SYSTEM',
+          content: `ESCROW ROOM: Trade ID #${tradeId} [ACTIVE]`,
+          isSystem: true
+        },
+        ...dbMessages
+      ]);
       handleAILogic(dbMessages);
     } catch (err) {
-      console.error("Fetch messages error:", err);
+      console.error('Fetch messages error:', err);
     }
-  };
+  }
 
-  const handleAILogic = async (dbMessages) => {
+  async function handleAILogic(dbMessages) {
     if (isProcessingAIRef.current || !trade) return;
-    
+
     const currentDetail = trade.status_detail || 'initial';
     const humanMessages = dbMessages.filter(m => !m.isAI && !m.isSystem);
 
-    // 1. Initial Welcome
     if (dbMessages.length === 0 && currentDetail === 'initial') {
       isProcessingAIRef.current = true;
       setIsTyping(true);
       setTimeout(async () => {
-        await saveBotMessage(`Welcome! 🤖 I am your AI Trade Assistant. How can I assist you with your trade today? I see that ${trade.offerer_username} is offering a ${trade.offered_item_name} for ${trade.owner_username}'s ${trade.requested_item_name}. Please both parties type 'READY' if these terms are correct.`);
+        await saveBotMessage(`Welcome to Trade #${tradeId}. ${trade.offerer_username} is offering ${trade.offered_item_name} for ${trade.owner_username}'s ${trade.requested_item_name}. Both traders can chat here directly and type READY when the terms are correct.`);
         await updateTradeDetail('waiting_agreement');
         setIsTyping(false);
         isProcessingAIRef.current = false;
@@ -144,15 +194,13 @@ export default function EscrowRoom() {
       return;
     }
 
-    // 2. Waiting for Agreement
     if (currentDetail === 'waiting_agreement') {
       const readyUsers = new Set(humanMessages.filter(m => m.content.toUpperCase().includes('READY') || m.content.toUpperCase().includes('AGREE')).map(m => m.senderId));
-      
       if (readyUsers.size >= 2) {
         isProcessingAIRef.current = true;
         setIsTyping(true);
         setTimeout(async () => {
-          await saveBotMessage(`Thank you both for your readiness. To ensure absolute transparency, I will now restate the agreed trade terms: ${trade.offerer_username} will receive ${trade.requested_item_name} (Value: $${trade.requested_item_value}) and ${trade.owner_username} will receive ${trade.offered_item_name} (Value: $${trade.offered_item_value}). If you agree to finalize this swap, please both type 'CONFIRM'.`);
+          await saveBotMessage(`Trade terms for #${tradeId}: ${trade.offerer_username} receives ${trade.requested_item_name} and ${trade.owner_username} receives ${trade.offered_item_name}. If both traders agree to finalize, type CONFIRM.`);
           await updateTradeDetail('terms_restated');
           setIsTyping(false);
           isProcessingAIRef.current = false;
@@ -160,34 +208,41 @@ export default function EscrowRoom() {
       }
     }
 
-    // 3. Terms Restated -> Final Confirmation
     if (currentDetail === 'terms_restated') {
       const confirmedUsers = new Set(humanMessages.filter(m => m.content.toUpperCase().includes('CONFIRM')).map(m => m.senderId));
-      
       if (confirmedUsers.size >= 2) {
         isProcessingAIRef.current = true;
         setIsTyping(true);
         setTimeout(async () => {
           const link = `https://quicktrade.io/vault/secure-swap-${Math.random().toString(36).substring(7)}`;
           setTradeLink(link);
-          await saveBotMessage(`The trade has been officially confirmed between ${trade.offerer_username} and ${trade.owner_username}. I have generated a secure swap channel for you. Proceed to the vault here: ${link}. It has been a pleasure assisting you!`);
+          await saveBotMessage(`Trade #${tradeId} has been confirmed by both traders. Secure vault: ${link}`);
           await updateTradeDetail('confirmed');
           setIsTyping(false);
           isProcessingAIRef.current = false;
         }, 2000);
       }
     }
+  }
+
+  const readFileAsDataUrl = (file, callback) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('File size exceeds 2MB limit.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => callback(reader.result);
+    reader.readAsDataURL(file);
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !trade) return;
 
-    const userId = Number(user?.user_id || user?.id);
     const offererId = Number(trade.offerer_user_id);
     const ownerId = Number(trade.owner_user_id);
-    const receiverId = userId === offererId ? ownerId : offererId;
-    
+    const receiverId = userId === offererId ? ownerId : (userId === ownerId ? offererId : 0);
     const msgContent = newMessage;
     setNewMessage('');
 
@@ -201,47 +256,139 @@ export default function EscrowRoom() {
       });
       await fetchMessages();
     } catch (err) {
-      console.error("Send error:", err);
-      const errMsg = err.response?.data?.error || err.message || "Unknown error";
-      const errorDisplay = `SYSTEM ERROR: ${errMsg}. Please check if the backend server is running and your database is up to date.`;
-      setMessages(prev => [...prev, { sender: 'SYSTEM', content: errorDisplay, isSystem: true }]);
+      const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+      setMessages(prev => [...prev, { sender: 'SYSTEM', content: `SYSTEM ERROR: ${errMsg}`, isSystem: true }]);
     }
   };
 
-  if (loading) return (
-    <div style={{ backgroundColor: '#000', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <div className="gold-glow" style={{ fontSize: '1.5rem', letterSpacing: '4px' }}>INITIALIZING SECURE TERMINAL...</div>
-    </div>
-  );
+  const submitItem = async (e) => {
+    e.preventDefault();
+    if (!ticket) return;
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/items`, {
+        user_id: userId,
+        ...itemForm,
+        quantity: Number(itemForm.quantity)
+      });
+      setTicketPayload(res.data);
+      toast.success('Item declaration saved.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save item declaration');
+    }
+  };
 
-  if (!trade) return <div style={{ color: 'red', textAlign: 'center', marginTop: '100px' }}>TRADE NODE NOT FOUND</div>;
+  const assignMiddleman = async () => {
+    if (!ticket) return;
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/assign-middleman`, {
+        middleman_user_id: Number(middlemanId || userId),
+        actor_user_id: userId
+      });
+      setTicketPayload(res.data);
+      toast.success('Middleman joined the escrow room.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to assign middleman');
+    }
+  };
+
+  const performAction = async (action) => {
+    if (!ticket) return;
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/middleman-action`, {
+        actor_user_id: userId,
+        action,
+        evidence_url: actionEvidence,
+        note: actionNote
+      });
+      setTicketPayload(res.data);
+      setActionEvidence('');
+      setActionNote('');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save action');
+    }
+  };
+
+  const completeTicket = async () => {
+    if (!ticket) return;
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/complete`, {
+        actor_user_id: userId,
+        evidence_url: actionEvidence,
+        note: actionNote
+      });
+      setTicketPayload(res.data);
+      await fetchTradeDetails();
+      toast.success('Trade completed and logged.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to complete trade');
+    }
+  };
+
+  const cancelTicket = async () => {
+    if (!ticket) return;
+    const confirmed = await confirmToast('Cancel this trade?', { confirmLabel: 'Cancel Trade' });
+    if (!confirmed) return;
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/cancel`, {
+        actor_user_id: userId,
+        reason: actionNote || 'Cancelled from escrow room.'
+      });
+      setTicketPayload(res.data);
+      await fetchTradeDetails();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to cancel trade');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ backgroundColor: '#000', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="gold-glow" style={{ fontSize: '1.5rem', letterSpacing: '4px' }}>INITIALIZING ESCROW ROOM...</div>
+      </div>
+    );
+  }
+
+  if (!trade) {
+    return <div style={{ color: 'red', textAlign: 'center', marginTop: '100px' }}>TRADE NOT FOUND</div>;
+  }
 
   return (
     <div style={{ backgroundColor: '#050505', minHeight: '100vh', color: '#eee', fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
       <TopBar token={token} />
-      
-      <main style={{ maxWidth: '1200px', margin: '40px auto', padding: '0 20px' }}>
-        <div style={{ 
-          border: '1px solid #333', padding: '15px', marginBottom: '20px', 
+
+      <main style={{ maxWidth: '1280px', margin: '40px auto', padding: '0 20px' }}>
+        <div style={{
+          border: '1px solid #333',
+          padding: '15px',
+          marginBottom: '20px',
           background: 'linear-gradient(180deg, #111 0%, #000 100%)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          borderRadius: '8px'
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderRadius: '8px',
+          gap: '16px',
+          flexWrap: 'wrap'
         }}>
           <div>
-            <span style={{ color: 'var(--gold)', fontWeight: 'bold' }}>TERMINAL:</span> QT-NODE-{tradeId}
+            <span style={{ color: 'var(--gold)', fontWeight: 'bold' }}>TRADE ID:</span> #{tradeId}
+            <span style={{ color: '#777', marginLeft: '14px' }}>Escrow Room</span>
           </div>
-          <div style={{ display: 'flex', gap: '20px', fontSize: '0.8rem' }}>
-            <span>ENCRYPTION: <span style={{ color: '#0f0' }}>AES-256</span></span>
-            <span>ASSISTANT: <span style={{ color: 'var(--gold)' }}>ACTIVE</span></span>
+          <div style={{ display: 'flex', gap: '20px', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+            <span>STATUS: <span style={{ color: 'var(--gold)' }}>{String(roomStatus).toUpperCase()}</span></span>
+            {ticket?.middleman_username && <span>MIDDLEMAN: <span style={{ color: '#44ff88' }}>{ticket.middleman_username}</span></span>}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: '20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            <div style={{ 
-              display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
-              backgroundColor: '#0a0a0a', padding: '30px', border: '1px solid #222', borderRadius: '12px'
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto 1fr',
+              alignItems: 'center',
+              backgroundColor: '#0a0a0a',
+              padding: '30px',
+              border: '1px solid #222',
+              borderRadius: '12px'
             }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.7rem', color: '#666', marginBottom: '10px', textTransform: 'uppercase' }}>Trader A: {trade.offerer_username}</div>
@@ -251,7 +398,7 @@ export default function EscrowRoom() {
               </div>
 
               <div style={{ padding: '0 40px', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.5rem', color: 'var(--gold)', animation: 'pulse 2s infinite' }}>⇄</div>
+                <div style={{ fontSize: '2.5rem', color: 'var(--gold)', animation: 'pulse 2s infinite' }}>&lt;-&gt;</div>
                 <div style={{ fontSize: '0.6rem', color: '#555', marginTop: '5px', letterSpacing: '2px' }}>SECURE EXCHANGE</div>
               </div>
 
@@ -264,32 +411,30 @@ export default function EscrowRoom() {
             </div>
 
             {tradeLink && (
-              <div style={{ 
-                backgroundColor: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--gold)', 
-                padding: '25px', textAlign: 'center', position: 'relative', overflow: 'hidden',
+              <div style={{
+                backgroundColor: 'rgba(212, 175, 55, 0.05)',
+                border: '1px solid var(--gold)',
+                padding: '25px',
+                textAlign: 'center',
                 borderRadius: '12px'
               }}>
                 <h3 style={{ color: 'var(--gold)', marginBottom: '15px', letterSpacing: '2px' }}>SECURE VAULT ACCESS GRANTED</h3>
-                <button 
-                  onClick={() => window.open(tradeLink, '_blank')}
-                  style={{ 
-                    backgroundColor: 'var(--gold)', color: '#000', padding: '12px 40px', 
-                    fontWeight: 'bold', border: 'none', cursor: 'pointer', letterSpacing: '1px',
-                    borderRadius: '4px', textTransform: 'uppercase'
-                  }}
-                >
-                  Enter Secure Vault
-                </button>
+                <button className="btn-gold" onClick={() => window.open(tradeLink, '_blank')}>Enter Secure Vault</button>
               </div>
             )}
 
-            <div style={{ 
-              backgroundColor: '#0a0a0a', border: '1px solid #222', height: '480px',
-              display: 'flex', flexDirection: 'column', borderRadius: '12px', overflow: 'hidden'
+            <div style={{
+              backgroundColor: '#0a0a0a',
+              border: '1px solid #222',
+              height: '560px',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: '12px',
+              overflow: 'hidden'
             }}>
               <div id="chat-messages" style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {messages.map((msg, i) => (
-                  <div key={i} style={{ 
+                  <div key={`${msg.id || i}-${i}`} style={{
                     alignSelf: msg.isUser ? 'flex-end' : 'flex-start',
                     maxWidth: '80%',
                     padding: '12px 16px',
@@ -300,7 +445,7 @@ export default function EscrowRoom() {
                     lineHeight: '1.5'
                   }}>
                     <div style={{ fontSize: '0.7rem', color: msg.isAI ? 'var(--gold)' : '#888', marginBottom: '5px', fontWeight: 'bold' }}>
-                      {msg.sender.toUpperCase()}
+                      {String(msg.sender || 'User').toUpperCase()}
                     </div>
                     <div style={{ color: msg.isAI ? '#fff' : (msg.isSystem ? '#888' : '#eee') }}>{msg.content}</div>
                   </div>
@@ -310,67 +455,143 @@ export default function EscrowRoom() {
               </div>
 
               <form onSubmit={handleSendMessage} style={{ padding: '20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', backgroundColor: '#0d0d0d' }}>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type your message or protocol command..."
-                  style={{ 
-                    flex: 1, backgroundColor: '#151515', border: '1px solid #333', 
-                    color: '#fff', outline: 'none', fontSize: '1rem', padding: '12px 15px',
+                  placeholder={isAdmin && !isParticipant ? 'Join the active trade chat as admin...' : 'Message the other trader...'}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#151515',
+                    border: '1px solid #333',
+                    color: '#fff',
+                    outline: 'none',
+                    fontSize: '1rem',
+                    padding: '12px 15px',
                     borderRadius: '6px'
                   }}
                 />
-                <button type="submit" style={{ 
-                  backgroundColor: 'var(--gold)', 
-                  color: '#000', 
-                  border: 'none', 
-                  padding: '0 25px', 
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  borderRadius: '6px',
-                  textTransform: 'uppercase',
-                  fontSize: '0.85rem'
-                }}>Send</button>
+                <button type="submit" className="btn-gold">Send</button>
               </form>
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ backgroundColor: '#0a0a0a', border: '1px solid #222', padding: '20px', borderRadius: '12px' }}>
-              <h4 style={{ color: 'var(--gold)', fontSize: '0.8rem', marginBottom: '15px', borderBottom: '1px solid #333', paddingBottom: '8px', textTransform: 'uppercase' }}>Trade Protocol</h4>
-              <ul style={{ listStyle: 'none', padding: 0, fontSize: '0.8rem', color: '#888', lineHeight: '2' }}>
-                <li>✅ Step 1: Initialize Agreement</li>
-                <li style={{ color: (trade?.status_detail === 'terms_restated' || trade?.status_detail === 'confirmed') ? '#44ff44' : '#888' }}>
-                  {trade?.status_detail === 'initial' ? '○' : '✅'} Step 2: Asset Verification
-                </li>
-                <li style={{ color: trade?.status_detail === 'confirmed' ? '#44ff44' : '#888' }}>
-                  {trade?.status_detail === 'confirmed' ? '✅' : '○'} Step 3: Final Confirmation
-                </li>
-                <li style={{ color: trade?.status_detail === 'confirmed' ? '#44ff44' : '#888' }}>
-                  {trade?.status_detail === 'confirmed' ? '✅' : '○'} Step 4: Vault Execution
-                </li>
-              </ul>
-            </div>
+          <aside style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <section className="ticket-panel">
+              <h2>Middleman Trade Room</h2>
+              <div style={{ display: 'grid', gap: '8px', marginBottom: '16px', fontSize: '0.82rem', color: '#aaa' }}>
+                <div><strong style={{ color: '#fff' }}>Trade ID:</strong> #{tradeId}</div>
+                <div><strong style={{ color: '#fff' }}>Room:</strong> {ticket?.ticket_code || 'Loading...'}</div>
+                <div><strong style={{ color: '#fff' }}>Trader A:</strong> {trade.offerer_username}</div>
+                <div><strong style={{ color: '#fff' }}>Trader B:</strong> {trade.owner_username}</div>
+                <div><strong style={{ color: '#fff' }}>Status:</strong> {roomStatus}</div>
+              </div>
 
-            <div style={{ backgroundColor: '#0a0a0a', border: '1px solid #222', padding: '20px', borderRadius: '12px' }}>
-              <h4 style={{ color: 'var(--gold)', fontSize: '0.8rem', marginBottom: '15px', borderBottom: '1px solid #333', paddingBottom: '8px', textTransform: 'uppercase' }}>Assistant Directives</h4>
-              <p style={{ fontSize: '0.75rem', color: '#666', lineHeight: '1.6' }}>
-                - AI Assistant handles all swaps.<br/>
-                - Both parties must type 'READY'.<br/>
-                - Both parties must type 'CONFIRM'.<br/>
-                - Items are held in escrow.
-              </p>
-            </div>
-          </div>
+              {!ticket?.middleman_user_id && isAdmin && (
+                <div className="ticket-form compact" style={{ marginBottom: '16px' }}>
+                  <p className="muted">Admins can join this active trade as the assigned middleman.</p>
+                  <input value={middlemanId} onChange={(e) => setMiddlemanId(e.target.value)} placeholder={`Middleman user ID (${userId})`} />
+                  <button className="btn-gold" onClick={assignMiddleman}>Join as Middleman</button>
+                </div>
+              )}
+
+              {canManageMiddleman && ticket?.middleman_user_id ? (
+                <div className="ticket-form compact">
+                  <textarea placeholder="Action note" value={actionNote} onChange={(e) => setActionNote(e.target.value)} />
+                  <input type="file" accept="image/*" onChange={(e) => readFileAsDataUrl(e.target.files[0], setActionEvidence)} />
+                  {actionEvidence && <img className="evidence-preview" src={actionEvidence} alt="Action evidence" />}
+                  {middlemanActions.map(item => (
+                    <button key={item.action} className="btn-outline-gold" onClick={() => performAction(item.action)}>
+                      {item.label}
+                    </button>
+                  ))}
+                  <button className="btn-gold" onClick={completeTicket}>Release / Complete Trade</button>
+                  <button className="danger-btn" onClick={cancelTicket}>Cancel Trade</button>
+                </div>
+              ) : (
+                <p className="muted" style={{ fontSize: '0.82rem' }}>
+                  {isAdmin ? 'Join as middleman to use trade handling actions.' : 'An admin middleman can join this room during the active trade.'}
+                </p>
+              )}
+            </section>
+
+            <section className="ticket-panel">
+              <h2>Trade Details</h2>
+              <div className="item-declaration-grid" style={{ gridTemplateColumns: '1fr', marginBottom: '12px' }}>
+                {[ticket?.creator_user_id, ticket?.joiner_user_id].filter(Boolean).map((participantId, index) => {
+                  const submission = items.find(item => Number(item.user_id) === Number(participantId));
+                  const label = index === 0 ? 'Trader A' : 'Trader B';
+                  return (
+                    <div className="declaration-card" style={{ minHeight: 'auto' }} key={participantId}>
+                      <h3>{label}</h3>
+                      {submission ? (
+                        <>
+                          {submission.screenshot_url && <img src={submission.screenshot_url} alt={submission.item_name} />}
+                          <h4>{submission.item_name}</h4>
+                          <p>{submission.game_name} / Qty {submission.quantity}</p>
+                          {submission.notes && <p className="muted">{submission.notes}</p>}
+                        </>
+                      ) : (
+                        <p className="muted">No declaration submitted yet.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isParticipant && !['Completed', 'Cancelled'].includes(ticket?.status) && (
+                <form className="ticket-form" onSubmit={submitItem}>
+                  <h3>{mySubmission ? 'Update My Item' : 'Declare My Item'}</h3>
+                  <input placeholder="Game name" value={itemForm.game_name} onChange={(e) => setItemForm({ ...itemForm, game_name: e.target.value })} required />
+                  <input placeholder="Item name" value={itemForm.item_name} onChange={(e) => setItemForm({ ...itemForm, item_name: e.target.value })} required />
+                  <input type="number" min="1" placeholder="Qty" value={itemForm.quantity} onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })} required />
+                  <textarea placeholder="Optional notes" value={itemForm.notes} onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })} />
+                  <input type="file" accept="image/*" onChange={(e) => readFileAsDataUrl(e.target.files[0], (url) => setItemForm({ ...itemForm, screenshot_url: url }))} />
+                  {itemForm.screenshot_url && <img className="evidence-preview" src={itemForm.screenshot_url} alt="Evidence preview" />}
+                  <button className="btn-gold">Save Declaration</button>
+                </form>
+              )}
+            </section>
+
+            <section className="ticket-panel">
+              <h2>Middleman Logs</h2>
+              <div className="log-grid" style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                {logs.length > 0 ? logs.map(log => (
+                  <div className="log-row" style={{ alignItems: 'flex-start', padding: '12px' }} key={log.log_id}>
+                    <div>
+                      <strong>{log.event_type.replaceAll('_', ' ').toUpperCase()}</strong>
+                      <p>{log.message}</p>
+                      <span>{log.actor_username || 'System'} / {new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    {log.evidence_url && <img src={log.evidence_url} alt="Evidence" />}
+                  </div>
+                )) : (
+                  <p className="muted">No middleman actions yet.</p>
+                )}
+              </div>
+            </section>
+          </aside>
         </div>
       </main>
-      
+
       <style>{`
         @keyframes pulse {
           0% { opacity: 0.5; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.05); }
           100% { opacity: 0.5; transform: scale(1); }
+        }
+
+        @media (max-width: 980px) {
+          main > div[style*="grid-template-columns: minmax"] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 700px) {
+          main div[style*="grid-template-columns: 1fr auto 1fr"] {
+            grid-template-columns: 1fr !important;
+            gap: 24px;
+          }
         }
       `}</style>
       <Footer />

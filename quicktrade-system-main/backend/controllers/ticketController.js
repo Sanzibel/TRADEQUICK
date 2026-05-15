@@ -38,6 +38,22 @@ const fetchTicketByCode = async (db, ticketCode) => {
   );
 };
 
+const fetchTicketByTradeId = async (db, tradeId) => {
+  return db.get(
+    `SELECT 
+      tt.*,
+      creator.username AS creator_username,
+      joiner.username AS joiner_username,
+      middleman.username AS middleman_username
+     FROM TradeTickets tt
+     JOIN users creator ON tt.creator_user_id = creator.user_id
+     LEFT JOIN users joiner ON tt.joiner_user_id = joiner.user_id
+     LEFT JOIN users middleman ON tt.middleman_user_id = middleman.user_id
+     WHERE tt.trade_id = ?`,
+    [Number(tradeId)]
+  );
+};
+
 const addTicketLog = async (db, ticketId, actorUserId, eventType, message, evidenceUrl = null) => {
   await db.run(
     `INSERT INTO TradeTicketLogs (ticket_id, actor_user_id, event_type, message, evidence_url)
@@ -104,10 +120,81 @@ const getTicketPayload = async (db, ticketCode) => {
   return { ticket, items, logs, history };
 };
 
+const getTicketPayloadByTradeId = async (db, tradeId) => {
+  const ticket = await fetchTicketByTradeId(db, tradeId);
+  if (!ticket) return null;
+  return getTicketPayload(db, ticket.ticket_code);
+};
+
 const userExists = async (db, userId) => {
   if (!userId) return false;
   const user = await db.get("SELECT user_id FROM users WHERE user_id = ?", [Number(userId)]);
   return !!user;
+};
+
+const getTradeParticipants = async (db, tradeId) => {
+  return db.get(
+    `SELECT 
+      t.trade_id,
+      u_offerer.user_id AS creator_user_id,
+      u_requested.user_id AS joiner_user_id
+     FROM Trades t
+     JOIN ItemPosts ip_offered ON t.item_offered = ip_offered.post_id
+     JOIN ItemPosts ip_requested ON t.item_requested = ip_requested.post_id
+     JOIN users u_offerer ON ip_offered.user_id = u_offerer.user_id
+     JOIN users u_requested ON ip_requested.user_id = u_requested.user_id
+     WHERE t.trade_id = ?`,
+    [Number(tradeId)]
+  );
+};
+
+exports.getOrCreateTradeTicket = async (req, res) => {
+  const db = await sql.getDB();
+  try {
+    const { tradeId } = req.params;
+    const existing = await getTicketPayloadByTradeId(db, tradeId);
+    if (existing) return res.json(existing);
+
+    const trade = await getTradeParticipants(db, tradeId);
+    if (!trade) return res.status(404).json({ error: "Trade not found" });
+
+    let ticketCode = generateTicketCode();
+    let created = null;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        created = await db.run(
+          `INSERT INTO TradeTickets (ticket_code, trade_id, creator_user_id, joiner_user_id, status, invite_note)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            ticketCode,
+            Number(tradeId),
+            Number(trade.creator_user_id),
+            Number(trade.joiner_user_id),
+            "Pending",
+            `Escrow room for Trade #${tradeId}`
+          ]
+        );
+        break;
+      } catch (err) {
+        ticketCode = generateTicketCode();
+        if (attempt === 2) throw err;
+      }
+    }
+
+    const ticketId = created.lastID;
+    await db.run(
+      `INSERT INTO TradeTicketStatusHistory (ticket_id, previous_status, new_status, changed_by, note)
+       VALUES (?, ?, ?, ?, ?)`,
+      [ticketId, null, "Pending", Number(trade.creator_user_id), "Escrow room opened for this trade"]
+    );
+    await addTicketLog(db, ticketId, trade.creator_user_id, "room_created", `Escrow Room linked to Trade #${tradeId}.`);
+
+    res.status(201).json(await getTicketPayload(db, ticketCode));
+  } catch (err) {
+    console.error("[GET_OR_CREATE_TRADE_TICKET_ERROR]", err);
+    res.status(500).json({ error: "Failed to load escrow middleman room" });
+  }
 };
 
 exports.createTicket = async (req, res) => {
@@ -323,6 +410,9 @@ exports.completeTicket = async (req, res) => {
 
     await addTicketLog(db, ticket.ticket_id, actor_user_id, "completed", note || "Middleman completed the exchange and saved final evidence.", evidence_url || null);
     await setTicketStatus(db, ticket, "Completed", actor_user_id, "Items transferred and ticket completed.");
+    if (ticket.trade_id) {
+      await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["completed", "confirmed", ticket.trade_id]);
+    }
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
   } catch (err) {
@@ -343,6 +433,9 @@ exports.cancelTicket = async (req, res) => {
 
     await addTicketLog(db, ticket.ticket_id, actor_user_id, "cancelled", reason || "Ticket cancelled.");
     await setTicketStatus(db, ticket, "Cancelled", actor_user_id, reason || "Ticket cancelled.");
+    if (ticket.trade_id) {
+      await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["cancelled", "cancelled", ticket.trade_id]);
+    }
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
   } catch (err) {

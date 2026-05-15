@@ -43,12 +43,6 @@ const TopBar = ({ token, logout, onPostItem, searchTerm, onSearchChange }) => {
       </div>
 
       <div className="top-bar-right">
-        {token && (
-          <Link to="/tickets" className="gold-glow" style={{ fontWeight: 'bold', marginRight: '10px' }}>
-            Tickets
-          </Link>
-        )}
-
         {token && isAdmin && (
           <Link to="/admin" className="gold-glow" style={{ fontWeight: 'bold', marginRight: '10px' }}>
             Admin

@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS Bookmarks (
 CREATE TABLE IF NOT EXISTS TradeTickets (
   ticket_id SERIAL PRIMARY KEY,
   ticket_code TEXT UNIQUE NOT NULL,
+  trade_id INTEGER UNIQUE,
   creator_user_id INTEGER NOT NULL,
   joiner_user_id INTEGER,
   middleman_user_id INTEGER,
@@ -123,6 +124,7 @@ CREATE TABLE IF NOT EXISTS TradeTickets (
   cancelled_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (trade_id) REFERENCES Trades(trade_id),
   FOREIGN KEY (creator_user_id) REFERENCES users(user_id),
   FOREIGN KEY (joiner_user_id) REFERENCES users(user_id),
   FOREIGN KEY (middleman_user_id) REFERENCES users(user_id)
@@ -177,6 +179,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_convo_id ON Messages(convo_id);
 CREATE INDEX IF NOT EXISTS idx_tradetickets_creator ON TradeTickets(creator_user_id);
 CREATE INDEX IF NOT EXISTS idx_tradetickets_joiner ON TradeTickets(joiner_user_id);
 CREATE INDEX IF NOT EXISTS idx_tradetickets_middleman ON TradeTickets(middleman_user_id);
+CREATE INDEX IF NOT EXISTS idx_tradetickets_trade_id ON TradeTickets(trade_id);
 CREATE INDEX IF NOT EXISTS idx_tradeticketitems_ticket_id ON TradeTicketItems(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_tradeticketlogs_ticket_id ON TradeTicketLogs(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_tradetickethistory_ticket_id ON TradeTicketStatusHistory(ticket_id);

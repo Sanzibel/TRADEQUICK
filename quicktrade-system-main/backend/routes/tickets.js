@@ -7,6 +7,7 @@ router.post("/", ticketController.createTicket);
 router.post("/join", ticketController.joinTicket);
 router.get("/admin/overview", authenticateToken, requireAdmin, ticketController.getAdminTickets);
 router.get("/user/:user_id", ticketController.getUserTickets);
+router.get("/trade/:tradeId", ticketController.getOrCreateTradeTicket);
 router.get("/:ticketCode", ticketController.getTicket);
 router.post("/:ticketCode/items", ticketController.submitItem);
 router.post("/:ticketCode/assign-middleman", ticketController.assignMiddleman);

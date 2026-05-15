@@ -1,5 +1,92 @@
 const sql = require("../db");
 
+const tradeDetailQuery = `
+  SELECT 
+    t.trade_id, 
+    t.status, 
+    t.timestamp,
+    t.message,
+    t.middleman,
+    t.status_detail,
+    ip_offered.name AS offered_item_name,
+    ip_offered.value AS offered_item_value,
+    ip_offered.game AS offered_item_game,
+    ip_offered.screenshot_url AS offered_item_image,
+    ip_requested.name AS requested_item_name,
+    ip_requested.value AS requested_item_value,
+    ip_requested.game AS requested_item_game,
+    ip_requested.screenshot_url AS requested_item_image,
+    u_offerer.username AS offerer_username,
+    u_offerer.user_id AS offerer_user_id,
+    u_requested.username AS owner_username,
+    u_requested.user_id AS owner_user_id
+  FROM Trades t
+  JOIN ItemPosts ip_offered ON t.item_offered = ip_offered.post_id
+  JOIN ItemPosts ip_requested ON t.item_requested = ip_requested.post_id
+  JOIN users u_offerer ON ip_offered.user_id = u_offerer.user_id
+  JOIN users u_requested ON ip_requested.user_id = u_requested.user_id
+`;
+
+const generateTicketCode = () => {
+  const stamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `QT-${stamp}-${random}`;
+};
+
+const ensureEscrowTicket = async (db, tradeId) => {
+  const existing = await db.get("SELECT ticket_id FROM TradeTickets WHERE trade_id = ?", [Number(tradeId)]);
+  if (existing) return;
+
+  const trade = await db.get(`
+    SELECT
+      t.trade_id,
+      u_offerer.user_id AS creator_user_id,
+      u_requested.user_id AS joiner_user_id
+    FROM Trades t
+    JOIN ItemPosts ip_offered ON t.item_offered = ip_offered.post_id
+    JOIN ItemPosts ip_requested ON t.item_requested = ip_requested.post_id
+    JOIN users u_offerer ON ip_offered.user_id = u_offerer.user_id
+    JOIN users u_requested ON ip_requested.user_id = u_requested.user_id
+    WHERE t.trade_id = ?
+  `, [Number(tradeId)]);
+
+  if (!trade) return;
+
+  let ticketCode = generateTicketCode();
+  let created = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      created = await db.run(
+        `INSERT INTO TradeTickets (ticket_code, trade_id, creator_user_id, joiner_user_id, status, invite_note)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          ticketCode,
+          Number(tradeId),
+          Number(trade.creator_user_id),
+          Number(trade.joiner_user_id),
+          "Pending",
+          `Escrow room for Trade #${tradeId}`
+        ]
+      );
+      break;
+    } catch (err) {
+      ticketCode = generateTicketCode();
+      if (attempt === 2) throw err;
+    }
+  }
+
+  await db.run(
+    `INSERT INTO TradeTicketStatusHistory (ticket_id, previous_status, new_status, changed_by, note)
+     VALUES (?, ?, ?, ?, ?)`,
+    [created.lastID, null, "Pending", Number(trade.creator_user_id), "Escrow room opened for this trade"]
+  );
+  await db.run(
+    `INSERT INTO TradeTicketLogs (ticket_id, actor_user_id, event_type, message)
+     VALUES (?, ?, ?, ?)`,
+    [created.lastID, trade.creator_user_id, "room_created", `Escrow Room linked to Trade #${tradeId}.`]
+  );
+};
+
 exports.createTrade = async (req, res) => {
   const db = await sql.getDB();
   const isProduction = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.NODE_ENV === 'production';
@@ -53,6 +140,9 @@ exports.respondTrade = async (req, res) => {
     }
 
     await db.run('UPDATE Trades SET status = ? WHERE trade_id = ?', [action, trade_id]);
+    if (action === 'in_escrow') {
+      await ensureEscrowTicket(db, trade_id);
+    }
     
     res.json({ message: `Trade ${action === 'in_escrow' ? 'accepted' : action} successfully` });
   } catch (err) {
@@ -151,29 +241,7 @@ exports.getUserTrades = async (req, res) => {
     
     // Fetch trades where the user is either the offerer or the requested item owner
     const trades = await db.all(`
-      SELECT 
-        t.trade_id, 
-        t.status, 
-        t.timestamp,
-        t.message,
-        t.middleman,
-        ip_offered.name AS offered_item_name,
-        ip_offered.value AS offered_item_value,
-        ip_offered.game AS offered_item_game,
-        ip_offered.screenshot_url AS offered_item_image,
-        ip_requested.name AS requested_item_name,
-        ip_requested.value AS requested_item_value,
-        ip_requested.game AS requested_item_game,
-        ip_requested.screenshot_url AS requested_item_image,
-        u_offerer.username AS offerer_username,
-        u_offerer.user_id AS offerer_user_id,
-        u_requested.username AS owner_username,
-        u_requested.user_id AS owner_user_id
-      FROM Trades t
-      JOIN ItemPosts ip_offered ON t.item_offered = ip_offered.post_id
-      JOIN ItemPosts ip_requested ON t.item_requested = ip_requested.post_id
-      JOIN users u_offerer ON ip_offered.user_id = u_offerer.user_id
-      JOIN users u_requested ON ip_requested.user_id = u_requested.user_id
+      ${tradeDetailQuery}
       WHERE ip_offered.user_id = ? OR ip_requested.user_id = ?
       ORDER BY t.timestamp DESC
     `, [Number(user_id), Number(user_id)]);
@@ -183,6 +251,23 @@ exports.getUserTrades = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch user trades" });
+  }
+};
+
+exports.getTradeById = async (req, res) => {
+  try {
+    const { trade_id } = req.params;
+    const db = await sql.getDB();
+    const trade = await db.get(`
+      ${tradeDetailQuery}
+      WHERE t.trade_id = ?
+    `, [Number(trade_id)]);
+
+    if (!trade) return res.status(404).json({ error: "Trade not found" });
+    res.json(trade);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch trade" });
   }
 };
 

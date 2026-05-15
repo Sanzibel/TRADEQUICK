@@ -7,6 +7,7 @@ router.post("/respond", tradeController.respondTrade);
 router.post("/cancel", tradeController.cancelTrade);
 router.get("/reports", tradeController.getReports);
 router.get("/user/:user_id", tradeController.getUserTrades);
+router.get("/:trade_id", tradeController.getTradeById);
 router.post("/update-detail", tradeController.updateTradeStatusDetail);
 
 module.exports = router;

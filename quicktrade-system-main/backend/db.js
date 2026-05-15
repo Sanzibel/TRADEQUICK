@@ -173,6 +173,7 @@ const initDB = async () => {
                     CREATE TABLE IF NOT EXISTS TradeTickets (
                         ticket_id SERIAL PRIMARY KEY,
                         ticket_code TEXT UNIQUE NOT NULL,
+                        trade_id INTEGER UNIQUE,
                         creator_user_id INTEGER NOT NULL,
                         joiner_user_id INTEGER,
                         middleman_user_id INTEGER,
@@ -182,6 +183,7 @@ const initDB = async () => {
                         cancelled_at TIMESTAMP,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (trade_id) REFERENCES Trades(trade_id),
                         FOREIGN KEY (creator_user_id) REFERENCES users(user_id),
                         FOREIGN KEY (joiner_user_id) REFERENCES users(user_id),
                         FOREIGN KEY (middleman_user_id) REFERENCES users(user_id)
@@ -248,6 +250,10 @@ const initDB = async () => {
                 try {
                     await dbInterface.run('ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT \'user\'');
                 } catch (e) { console.log("Postgres Migration Info: user role column check."); }
+
+                try {
+                    await dbInterface.run('ALTER TABLE TradeTickets ADD COLUMN IF NOT EXISTS trade_id INTEGER');
+                } catch (e) { console.log("Postgres Migration Info: ticket trade_id column check."); }
 
                 console.log("PostgreSQL Tables Verified/Created and Migrated");
                 db = dbInterface;
@@ -374,6 +380,7 @@ const initDB = async () => {
                     CREATE TABLE IF NOT EXISTS TradeTickets (
                         ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         ticket_code TEXT UNIQUE NOT NULL,
+                        trade_id INTEGER UNIQUE,
                         creator_user_id INTEGER NOT NULL,
                         joiner_user_id INTEGER,
                         middleman_user_id INTEGER,
@@ -383,6 +390,7 @@ const initDB = async () => {
                         cancelled_at DATETIME,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (trade_id) REFERENCES Trades(trade_id),
                         FOREIGN KEY (creator_user_id) REFERENCES users(user_id),
                         FOREIGN KEY (joiner_user_id) REFERENCES users(user_id),
                         FOREIGN KEY (middleman_user_id) REFERENCES users(user_id)
@@ -433,6 +441,7 @@ const initDB = async () => {
                     'ALTER TABLE Messages ADD COLUMN type TEXT DEFAULT "user"',
                     'ALTER TABLE Messages ADD COLUMN trade_id INTEGER',
                     'ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"',
+                    'ALTER TABLE TradeTickets ADD COLUMN trade_id INTEGER',
                     'CREATE TABLE IF NOT EXISTS TradeLogs (log_id INTEGER PRIMARY KEY AUTOINCREMENT, trade_id INTEGER, event TEXT, details TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)'
                 ];
                 for (const migration of migrations) {

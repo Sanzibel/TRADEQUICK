@@ -318,7 +318,7 @@ export default function Admin() {
                   {section.list.length > 0 ? section.list.map(ticket => (
                     <a
                       key={ticket.ticket_id}
-                      href={`/ticket/${ticket.ticket_code}`}
+                      href={ticket.trade_id ? `/escrow/${ticket.trade_id}` : '#'}
                       style={{
                         display: 'block',
                         padding: '12px',
