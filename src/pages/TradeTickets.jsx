@@ -3,6 +3,8 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
+import { toast } from '../utils/notifications.jsx';
+import { clearAuthSession } from '../utils/auth';
 import './tickets.css';
 
 export default function TradeTickets() {
@@ -27,8 +29,7 @@ export default function TradeTickets() {
   }, [user]);
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearAuthSession();
     setToken(null);
     navigate('/');
   };
@@ -56,7 +57,7 @@ export default function TradeTickets() {
       });
       navigate(`/ticket/${res.data.ticket.ticket_code}`);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to create ticket');
+      toast.error(err.response?.data?.error || 'Failed to create ticket');
     } finally {
       setLoading(false);
     }
@@ -77,7 +78,7 @@ export default function TradeTickets() {
       });
       navigate(`/ticket/${res.data.ticket.ticket_code}`);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to join ticket');
+      toast.error(err.response?.data?.error || 'Failed to join ticket');
     } finally {
       setLoading(false);
     }

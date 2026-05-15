@@ -8,6 +8,8 @@ import TradeModal from "../components/TradeModal";
 import ChatBox from "../components/ChatBox";
 import PostItemModal from "../components/PostItemModal";
 import axios from "axios";
+import { toast } from "../utils/notifications.jsx";
+import { clearAuthSession } from "../utils/auth";
 
 import { useNavigate } from "react-router-dom";
 
@@ -40,11 +42,10 @@ export default function Home() {
   const [items, setItems] = useState([]);
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearAuthSession();
     setToken(null);
     setUser(null);
-    alert("Logged out!");
+    toast.success("Logged out!");
   };
 
   useEffect(() => {
@@ -101,7 +102,7 @@ export default function Home() {
 
   const handlePostItem = async (newItem) => {
     if (!token || !user) {
-      alert("Please login to post items!");
+      toast.error("Please login to post items!");
       return;
     }
 
@@ -113,7 +114,7 @@ export default function Home() {
       });
       
       console.log("Post response:", res.data);
-      alert("Item listed successfully!");
+      toast.success("Item listed successfully!");
       await fetchItems(); // Refresh the list from database
       setIsPostModalOpen(false);
       
@@ -121,13 +122,13 @@ export default function Home() {
       navigate("/profile?tab=listings");
     } catch (err) {
       console.error("Detailed Post Error:", err.response?.data || err.message);
-      alert(`Error posting item: ${err.response?.data?.error || "Server connection issue"}`);
+      toast.error(`Error posting item: ${err.response?.data?.error || "Server connection issue"}`);
     }
   };
 
   const handleTrade = (item) => {
     if (!token) {
-      alert("Please login to trade!");
+      toast.error("Please login to trade!");
       return;
     }
     setSelectedItem(item);
@@ -136,7 +137,7 @@ export default function Home() {
 
   const handleMessage = (item) => {
     if (!token) {
-      alert("Please login to message owners!");
+      toast.error("Please login to message owners!");
       return;
     }
     setChatRecipient("Owner of " + item.name);
@@ -145,7 +146,7 @@ export default function Home() {
 
   const handleBookmark = async (itemId) => {
     if (!token || !user) {
-      alert("Please login to bookmark items!");
+      toast.error("Please login to bookmark items!");
       return;
     }
 

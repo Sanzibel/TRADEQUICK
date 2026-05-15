@@ -5,6 +5,8 @@ import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
 import ItemCard from '../components/ItemCard';
 import ChatBox from '../components/ChatBox';
+import { confirmToast, toast } from '../utils/notifications.jsx';
+import { clearAuthSession } from '../utils/auth';
 
 export default function Profile() {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -105,23 +107,25 @@ export default function Profile() {
   };
 
   const handleDeleteListing = async (postId) => {
-    if (!window.confirm("Are you sure you want to remove this listing?")) return;
+    const confirmed = await confirmToast("Are you sure you want to remove this listing?", {
+      confirmLabel: 'Remove Listing'
+    });
+    if (!confirmed) return;
     
     try {
       await axios.delete(`/api/items/listings/${postId}`, {
         data: { user_id: user.user_id }
       });
       fetchListings(); // Refresh list
-      alert("Listing removed!");
+      toast.success("Listing removed!");
     } catch (err) {
       console.error("Delete listing error:", err);
-      alert("Failed to remove listing.");
+      toast.error("Failed to remove listing.");
     }
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearAuthSession();
     setToken(null);
     window.location.href = "/";
   };
