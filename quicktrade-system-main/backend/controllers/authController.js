@@ -2,6 +2,19 @@ const sql = require("../db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+const getAdminEmails = () => {
+  return (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+};
+
+const getUserRole = (email, currentRole = "user") => {
+  return getAdminEmails().includes(String(email || "").toLowerCase())
+    ? "admin"
+    : currentRole || "user";
+};
+
 exports.register = async (req, res) => {
   try {
     const { full_name, username, email, password } = req.body;
@@ -25,9 +38,11 @@ exports.register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
+    const role = getUserRole(email);
+
     await db.run(
-      'INSERT INTO users (full_name, username, email, password) VALUES (?, ?, ?, ?)',
-      [full_name, username, email, hashedPassword]
+      'INSERT INTO users (full_name, username, email, password, role) VALUES (?, ?, ?, ?, ?)',
+      [full_name, username, email, hashedPassword, role]
     );
 
     res.status(201).json({ message: "User registered successfully" });
@@ -57,7 +72,11 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const role = user.role || "user";
+    const role = getUserRole(user.email, user.role);
+
+    if (role !== user.role) {
+      await db.run('UPDATE users SET role = ? WHERE user_id = ?', [role, user.user_id]);
+    }
 
     const token = jwt.sign(
       { user_id: user.user_id, username: user.username, role },
