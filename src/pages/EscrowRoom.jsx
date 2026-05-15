@@ -8,9 +8,7 @@ import './tickets.css';
 
 const middlemanActions = [
   { action: 'received_a', label: 'Received from Trader A' },
-  { action: 'verified_a', label: 'Verify Trader A Item' },
-  { action: 'received_b', label: 'Received from Trader B' },
-  { action: 'verified_b', label: 'Verify Trader B Item' }
+  { action: 'received_b', label: 'Received from Trader B' }
 ];
 
 const EMPTY_ARRAY = [];
@@ -18,9 +16,11 @@ const EMPTY_ARRAY = [];
 export default function EscrowRoom() {
   const { tradeId } = useParams();
   const navigate = useNavigate();
+  const chatContainerRef = useRef(null);
   const chatEndRef = useRef(null);
   const pollingRef = useRef(null);
   const isProcessingAIRef = useRef(false);
+  const shouldFollowChatRef = useRef(true);
 
   const [token] = useState(localStorage.getItem('token'));
   const [user] = useState(() => {
@@ -39,13 +39,8 @@ export default function EscrowRoom() {
   const [tradeLink, setTradeLink] = useState(null);
   const [ticketPayload, setTicketPayload] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [itemForm, setItemForm] = useState({
-    game_name: '',
-    item_name: '',
-    quantity: 1,
-    screenshot_url: '',
-    notes: ''
-  });
+  const [itemForm, setItemForm] = useState({ post_id: '', quantity: 1 });
+  const [userListings, setUserListings] = useState([]);
   const [middlemanId, setMiddlemanId] = useState('');
   const [actionEvidence, setActionEvidence] = useState('');
   const [actionNote, setActionNote] = useState('');
@@ -84,6 +79,7 @@ export default function EscrowRoom() {
       await fetchTradeDetails();
       await fetchMessages();
       await fetchTradeTicket();
+      await fetchUserListings();
     };
 
     init();
@@ -98,8 +94,16 @@ export default function EscrowRoom() {
   }, [tradeId]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (shouldFollowChatRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
+
+  const isChatNearBottom = () => {
+    const el = chatContainerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
 
   async function fetchTradeDetails() {
     try {
@@ -118,6 +122,16 @@ export default function EscrowRoom() {
       setTicketPayload(res.data);
     } catch (err) {
       console.error('Failed to fetch middleman room:', err);
+    }
+  }
+
+  async function fetchUserListings() {
+    if (!userId) return;
+    try {
+      const res = await axios.get(`/api/items/listings/${userId}`);
+      setUserListings(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to fetch user listings:', err);
     }
   }
 
@@ -150,6 +164,7 @@ export default function EscrowRoom() {
 
   async function fetchMessages() {
     try {
+      shouldFollowChatRef.current = isChatNearBottom();
       const res = await axios.get(`/api/messages/trade/${tradeId}`);
       const dbMessages = res.data.map(m => ({
         id: m.msg_id,
@@ -245,6 +260,7 @@ export default function EscrowRoom() {
     const receiverId = userId === offererId ? ownerId : (userId === ownerId ? offererId : 0);
     const msgContent = newMessage;
     setNewMessage('');
+    shouldFollowChatRef.current = true;
 
     try {
       await axios.post('/api/messages/send', {
@@ -264,10 +280,14 @@ export default function EscrowRoom() {
   const submitItem = async (e) => {
     e.preventDefault();
     if (!ticket) return;
+    if (!itemForm.post_id) {
+      toast.error('Select one of your listed items first.');
+      return;
+    }
     try {
       const res = await axios.post(`/api/tickets/${ticket.ticket_code}/items`, {
         user_id: userId,
-        ...itemForm,
+        post_id: Number(itemForm.post_id),
         quantity: Number(itemForm.quantity)
       });
       setTicketPayload(res.data);
@@ -432,7 +452,14 @@ export default function EscrowRoom() {
               borderRadius: '12px',
               overflow: 'hidden'
             }}>
-              <div id="chat-messages" style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div
+                id="chat-messages"
+                ref={chatContainerRef}
+                onScroll={() => {
+                  shouldFollowChatRef.current = isChatNearBottom();
+                }}
+                style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}
+              >
                 {messages.map((msg, i) => (
                   <div key={`${msg.id || i}-${i}`} style={{
                     alignSelf: msg.isUser ? 'flex-end' : 'flex-start',
@@ -542,12 +569,15 @@ export default function EscrowRoom() {
               {isParticipant && !['Completed', 'Cancelled'].includes(ticket?.status) && (
                 <form className="ticket-form" onSubmit={submitItem}>
                   <h3>{mySubmission ? 'Update My Item' : 'Declare My Item'}</h3>
-                  <input placeholder="Game name" value={itemForm.game_name} onChange={(e) => setItemForm({ ...itemForm, game_name: e.target.value })} required />
-                  <input placeholder="Item name" value={itemForm.item_name} onChange={(e) => setItemForm({ ...itemForm, item_name: e.target.value })} required />
-                  <input type="number" min="1" placeholder="Qty" value={itemForm.quantity} onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })} required />
-                  <textarea placeholder="Optional notes" value={itemForm.notes} onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })} />
-                  <input type="file" accept="image/*" onChange={(e) => readFileAsDataUrl(e.target.files[0], (url) => setItemForm({ ...itemForm, screenshot_url: url }))} />
-                  {itemForm.screenshot_url && <img className="evidence-preview" src={itemForm.screenshot_url} alt="Evidence preview" />}
+                  <select value={itemForm.post_id} onChange={(e) => setItemForm({ ...itemForm, post_id: e.target.value })} required>
+                    <option value="">Select one of your active listings</option>
+                    {userListings.map(listing => (
+                      <option key={listing.post_id} value={listing.post_id}>
+                        {listing.name} / {listing.game} / ${Number(listing.value).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                  {userListings.length === 0 && <p className="muted">Post a listing first, then return here to declare it.</p>}
                   <button className="btn-gold">Save Declaration</button>
                 </form>
               )}

@@ -14,5 +14,6 @@ router.post("/:ticketCode/assign-middleman", ticketController.assignMiddleman);
 router.post("/:ticketCode/middleman-action", ticketController.middlemanAction);
 router.post("/:ticketCode/complete", ticketController.completeTicket);
 router.post("/:ticketCode/cancel", ticketController.cancelTicket);
+router.delete("/:ticketCode", authenticateToken, requireAdmin, ticketController.deleteTicket);
 
 module.exports = router;

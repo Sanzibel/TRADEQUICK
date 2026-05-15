@@ -3,7 +3,8 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import Footer from '../components/Footer';
-import { toast } from '../utils/notifications.jsx';
+import { confirmToast, toast } from '../utils/notifications.jsx';
+import './tickets.css';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function Admin() {
   const [stats, setStats] = useState({ users: 0, items: 0, trades: 0 });
   const [games, setGames] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allListings, setAllListings] = useState([]);
   const [recentTrades, setRecentTrades] = useState([]);
   const [ticketOverview, setTicketOverview] = useState({
     active: [],
@@ -81,6 +83,15 @@ export default function Admin() {
     }
   };
 
+  const fetchListings = async () => {
+    try {
+      const res = await axios.get('/api/items');
+      setAllListings(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Failed to fetch listings:", err);
+    }
+  };
+
   const handleAddGame = async (e) => {
     e.preventDefault();
     try {
@@ -105,6 +116,37 @@ export default function Admin() {
     }
   };
 
+  const handleDeleteTicket = async (ticketCode) => {
+    const confirmed = await confirmToast(`Delete ticket ${ticketCode}?`, {
+      confirmLabel: 'Delete Ticket'
+    });
+    if (!confirmed) return;
+
+    try {
+      await axios.delete(`/api/tickets/${ticketCode}`, authConfig);
+      toast.success("Ticket deleted.");
+      fetchTicketOverview();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to delete ticket");
+    }
+  };
+
+  const handleDeleteListing = async (postId) => {
+    const confirmed = await confirmToast("Delete this listing from the marketplace?", {
+      confirmLabel: 'Delete Listing'
+    });
+    if (!confirmed) return;
+
+    try {
+      await axios.delete(`/api/items/admin/listings/${postId}`, authConfig);
+      toast.success("Listing deleted.");
+      fetchListings();
+      fetchStats();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to delete listing");
+    }
+  };
+
   useEffect(() => {
     if (!token || !user) {
       navigate('/login');
@@ -118,6 +160,7 @@ export default function Admin() {
     fetchCategories();
     fetchRecentTrades();
     fetchTicketOverview();
+    fetchListings();
   }, [token, user?.role]);
 
   return (
@@ -316,9 +359,8 @@ export default function Admin() {
                 <h3 style={{ color: 'var(--gold)', fontSize: '0.95rem', marginBottom: '14px' }}>{section.label}</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto' }}>
                   {section.list.length > 0 ? section.list.map(ticket => (
-                    <a
+                    <div
                       key={ticket.ticket_id}
-                      href={ticket.trade_id ? `/escrow/${ticket.trade_id}` : '#'}
                       style={{
                         display: 'block',
                         padding: '12px',
@@ -327,18 +369,44 @@ export default function Admin() {
                         borderRadius: '8px'
                       }}
                     >
-                      <div style={{ color: 'var(--gold)', fontWeight: 'bold', fontSize: '0.8rem' }}>{ticket.ticket_code}</div>
-                      <div style={{ color: '#ccc', fontSize: '0.75rem', marginTop: '4px' }}>
-                        {ticket.creator_username || 'User A'} / {ticket.joiner_username || 'Waiting'} / {ticket.middleman_username || 'No middleman'}
-                      </div>
-                      <div style={{ color: '#777', fontSize: '0.7rem', marginTop: '4px' }}>{ticket.status}</div>
-                    </a>
+                      <Link to={ticket.trade_id ? `/escrow/${ticket.trade_id}` : `/ticket/${ticket.ticket_code}`} style={{ display: 'block' }}>
+                        <div style={{ color: 'var(--gold)', fontWeight: 'bold', fontSize: '0.8rem' }}>{ticket.ticket_code}</div>
+                        <div style={{ color: '#ccc', fontSize: '0.75rem', marginTop: '4px' }}>
+                          {ticket.creator_username || 'User A'} / {ticket.joiner_username || 'Waiting'} / {ticket.middleman_username || 'No middleman'}
+                        </div>
+                        <div style={{ color: '#777', fontSize: '0.7rem', marginTop: '4px' }}>{ticket.status}</div>
+                      </Link>
+                      <button className="danger-btn" style={{ width: '100%', padding: '8px', marginTop: '10px' }} onClick={() => handleDeleteTicket(ticket.ticket_code)}>
+                        Delete Ticket
+                      </button>
+                    </div>
                   )) : (
                     <p style={{ color: '#666', fontSize: '0.85rem' }}>No tickets in this queue.</p>
                   )}
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: '40px', backgroundColor: 'var(--black-light)', padding: '30px', borderRadius: '15px', border: '1px solid #333' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ color: 'var(--gold)', fontSize: '1.2rem', textTransform: 'uppercase' }}>Listing Management</h2>
+            <button className="btn-outline-gold" onClick={fetchListings}>Refresh Listings</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px' }}>
+            {allListings.length > 0 ? allListings.map(listing => (
+              <div key={listing.post_id} style={{ backgroundColor: '#111', border: '1px solid #222', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ color: 'var(--gold)', fontWeight: 'bold', marginBottom: '6px' }}>{listing.name}</div>
+                <div style={{ color: '#ccc', fontSize: '0.8rem' }}>{listing.game} / {listing.category || 'Uncategorized'}</div>
+                <div style={{ color: '#777', fontSize: '0.8rem', margin: '6px 0 12px' }}>${Number(listing.value).toLocaleString()}</div>
+                <button className="danger-btn" style={{ width: '100%', padding: '8px' }} onClick={() => handleDeleteListing(listing.post_id)}>
+                  Delete Listing
+                </button>
+              </div>
+            )) : (
+              <p style={{ color: '#666' }}>No active listings.</p>
+            )}
           </div>
         </div>
           </>

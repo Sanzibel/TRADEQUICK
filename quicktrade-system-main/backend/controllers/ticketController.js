@@ -11,9 +11,7 @@ const VALID_STATUSES = [
 
 const MIDDLEMAN_ACTIONS = {
   received_a: "Received from User A",
-  verified_a: "Verified User A item",
-  received_b: "Received from User B",
-  verified_b: "Verified User B item"
+  received_b: "Received from User B"
 };
 
 const generateTicketCode = () => {
@@ -280,17 +278,25 @@ exports.submitItem = async (req, res) => {
   const db = await sql.getDB();
   try {
     const { ticketCode } = req.params;
-    const { user_id, game_name, item_name, quantity, screenshot_url, notes } = req.body;
+    const { user_id, post_id, quantity, notes } = req.body;
     const ticket = await fetchTicketByCode(db, ticketCode);
 
     if (!ticket) return res.status(404).json({ error: "Ticket not found" });
-    if (!game_name || !item_name || Number(quantity) < 1) {
-      return res.status(400).json({ error: "Game, item, and quantity are required" });
+    if (!post_id || Number(quantity || 1) < 1) {
+      return res.status(400).json({ error: "Select one of your posted listings" });
     }
     const isParticipant = [ticket.creator_user_id, ticket.joiner_user_id].some(id => Number(id) === Number(user_id));
     if (!isParticipant) return res.status(403).json({ error: "Only ticket participants can submit items" });
     if (["Completed", "Cancelled"].includes(ticket.status)) {
       return res.status(400).json({ error: "This ticket is closed" });
+    }
+
+    const listing = await db.get(
+      "SELECT post_id, name, game, screenshot_url FROM ItemPosts WHERE post_id = ? AND user_id = ?",
+      [Number(post_id), Number(user_id)]
+    );
+    if (!listing) {
+      return res.status(400).json({ error: "Declaration must use one of your active listings" });
     }
 
     const existing = await db.get(
@@ -303,16 +309,16 @@ exports.submitItem = async (req, res) => {
         `UPDATE TradeTicketItems
          SET game_name = ?, item_name = ?, quantity = ?, screenshot_url = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
          WHERE item_submission_id = ?`,
-        [game_name, item_name, Number(quantity), screenshot_url || null, notes || null, existing.item_submission_id]
+        [listing.game, listing.name, Number(quantity || 1), listing.screenshot_url || null, notes || null, existing.item_submission_id]
       );
-      await addTicketLog(db, ticket.ticket_id, user_id, "item_updated", "Participant updated their trade item declaration.", screenshot_url || null);
+      await addTicketLog(db, ticket.ticket_id, user_id, "item_updated", "Participant updated their trade item declaration.", listing.screenshot_url || null);
     } else {
       await db.run(
         `INSERT INTO TradeTicketItems (ticket_id, user_id, game_name, item_name, quantity, screenshot_url, notes)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [ticket.ticket_id, Number(user_id), game_name, item_name, Number(quantity), screenshot_url || null, notes || null]
+        [ticket.ticket_id, Number(user_id), listing.game, listing.name, Number(quantity || 1), listing.screenshot_url || null, notes || null]
       );
-      await addTicketLog(db, ticket.ticket_id, user_id, "item_submitted", "Participant submitted their trade item declaration.", screenshot_url || null);
+      await addTicketLog(db, ticket.ticket_id, user_id, "item_submitted", "Participant submitted their trade item declaration.", listing.screenshot_url || null);
     }
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
@@ -402,10 +408,10 @@ exports.completeTicket = async (req, res) => {
 
     const logs = await db.all("SELECT event_type FROM TradeTicketLogs WHERE ticket_id = ?", [ticket.ticket_id]);
     const eventTypes = new Set(logs.map(log => log.event_type));
-    const requiredEvents = ["received_a", "verified_a", "received_b", "verified_b"];
+    const requiredEvents = ["received_a", "received_b"];
     const missing = requiredEvents.filter(event => !eventTypes.has(event));
     if (missing.length > 0) {
-      return res.status(400).json({ error: `Missing verification steps: ${missing.join(", ")}` });
+      return res.status(400).json({ error: `Missing received steps: ${missing.join(", ")}` });
     }
 
     await addTicketLog(db, ticket.ticket_id, actor_user_id, "completed", note || "Middleman completed the exchange and saved final evidence.", evidence_url || null);
@@ -498,5 +504,29 @@ exports.getAdminTickets = async (req, res) => {
   } catch (err) {
     console.error("[GET_ADMIN_TICKETS_ERROR]", err);
     res.status(500).json({ error: "Failed to fetch admin tickets" });
+  }
+};
+
+exports.deleteTicket = async (req, res) => {
+  const db = await sql.getDB();
+  try {
+    const { ticketCode } = req.params;
+    const ticket = await fetchTicketByCode(db, ticketCode);
+
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+    await db.run("DELETE FROM TradeTicketItems WHERE ticket_id = ?", [ticket.ticket_id]);
+    await db.run("DELETE FROM TradeTicketLogs WHERE ticket_id = ?", [ticket.ticket_id]);
+    await db.run("DELETE FROM TradeTicketStatusHistory WHERE ticket_id = ?", [ticket.ticket_id]);
+    await db.run("DELETE FROM TradeTickets WHERE ticket_id = ?", [ticket.ticket_id]);
+
+    if (ticket.trade_id) {
+      await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["cancelled", "cancelled", ticket.trade_id]);
+    }
+
+    res.json({ message: "Ticket deleted" });
+  } catch (err) {
+    console.error("[DELETE_TICKET_ERROR]", err);
+    res.status(500).json({ error: "Failed to delete ticket" });
   }
 };

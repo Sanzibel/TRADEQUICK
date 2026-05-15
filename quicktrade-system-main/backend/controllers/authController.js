@@ -90,6 +90,7 @@ exports.login = async (req, res) => {
         user_id: user.user_id, 
         username: user.username, 
         full_name: user.full_name,
+        email: user.email,
         role,
         premium_status: user.premium_status,
         balance: user.balance
@@ -105,13 +106,84 @@ exports.verifyUser = async (req, res) => {
   try {
     const { user_id } = req.params;
     const db = await sql.getDB();
-    const user = await db.get('SELECT user_id FROM users WHERE user_id = ?', [user_id]);
+    const user = await db.get('SELECT user_id, full_name, username, email, role, premium_status, balance FROM users WHERE user_id = ?', [user_id]);
     if (user) {
-      res.json({ valid: true });
+      res.json({ valid: true, user });
     } else {
       res.status(404).json({ valid: false });
     }
   } catch (err) {
     res.status(500).json({ error: "Verification failed" });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const { full_name, username, email, current_password, new_password } = req.body;
+    const db = await sql.getDB();
+
+    if (Number(req.user?.user_id) !== Number(user_id)) {
+      return res.status(403).json({ error: "You can only update your own account" });
+    }
+
+    const user = await db.get('SELECT * FROM users WHERE user_id = ?', [user_id]);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const nextFullName = String(full_name || "").trim();
+    const nextUsername = String(username || "").trim();
+    const nextEmail = String(email || "").trim().toLowerCase();
+
+    if (!nextUsername || !nextEmail) {
+      return res.status(400).json({ error: "Username and email are required" });
+    }
+
+    const duplicate = await db.get(
+      'SELECT user_id FROM users WHERE (username = ? OR email = ?) AND user_id <> ?',
+      [nextUsername, nextEmail, user_id]
+    );
+    if (duplicate) {
+      return res.status(409).json({ error: "Username or email is already taken" });
+    }
+
+    let nextPassword = user.password;
+    if (new_password) {
+      if (String(new_password).length < 8) {
+        return res.status(400).json({ error: "New password must be at least 8 characters" });
+      }
+      if (!current_password) {
+        return res.status(400).json({ error: "Current password is required to change password" });
+      }
+      const passwordOk = await bcrypt.compare(current_password, user.password);
+      if (!passwordOk) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+      nextPassword = await bcrypt.hash(new_password, 10);
+    }
+
+    const role = getUserRole(nextEmail, user.role);
+
+    await db.run(
+      `UPDATE users
+       SET full_name = ?, username = ?, email = ?, password = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ?`,
+      [nextFullName || null, nextUsername, nextEmail, nextPassword, role, user_id]
+    );
+
+    const updated = await db.get(
+      'SELECT user_id, full_name, username, email, role, premium_status, balance FROM users WHERE user_id = ?',
+      [user_id]
+    );
+
+    const token = jwt.sign(
+      { user_id: updated.user_id, username: updated.username, role: updated.role },
+      process.env.JWT_SECRET || "your_jwt_secret",
+      { expiresIn: "24h" }
+    );
+
+    res.json({ message: "Profile updated", user: updated, token });
+  } catch (err) {
+    console.error("[UPDATE_PROFILE_ERROR]", err);
+    res.status(500).json({ error: "Failed to update profile" });
   }
 };

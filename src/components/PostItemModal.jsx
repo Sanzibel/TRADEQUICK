@@ -15,6 +15,7 @@ const PostItemModal = ({ isOpen, onClose, onPost }) => {
     preferences: '',
     visibility: 'public'
   });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -86,10 +87,14 @@ const PostItemModal = ({ isOpen, onClose, onPost }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onPost({ ...formData, screenshot_url: screenshot });
-    onClose();
+    setSubmitting(true);
+    try {
+      await onPost({ ...formData, screenshot_url: screenshot });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -209,7 +214,9 @@ const PostItemModal = ({ isOpen, onClose, onPost }) => {
           </div>
 
           <div className="modal-actions" style={{ display: 'flex', gap: '15px' }}>
-            <button type="submit" className="btn-gold" style={{ flex: 1 }}>Submit Listing</button>
+            <button type="submit" className="btn-gold" style={{ flex: 1 }} disabled={submitting}>
+              {submitting ? 'Submitting...' : 'Submit Listing'}
+            </button>
             <button type="button" className="btn-outline-gold" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
           </div>
         </form>

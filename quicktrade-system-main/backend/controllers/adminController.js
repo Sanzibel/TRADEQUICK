@@ -56,7 +56,7 @@ exports.getStats = async (req, res) => {
     const db = await sql.getDB();
     try {
         const userCount = await db.get('SELECT COUNT(*) as count FROM users');
-        const itemCount = await db.get('SELECT COUNT(*) as count FROM Items');
+        const itemCount = await db.get('SELECT COUNT(*) as count FROM ItemPosts');
         const tradeCount = await db.get('SELECT COUNT(*) as count FROM Trades');
         
         res.json({

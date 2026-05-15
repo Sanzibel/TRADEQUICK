@@ -52,7 +52,8 @@
 }
 
 .ticket-panel input,
-.ticket-panel textarea {
+.ticket-panel textarea,
+.ticket-panel select {
   width: 100%;
   padding: 12px;
   margin: 10px 0;

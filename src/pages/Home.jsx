@@ -69,6 +69,11 @@ export default function Home() {
     }
   }, [user]);
 
+  useEffect(() => {
+    const refresh = setInterval(fetchItems, 5000);
+    return () => clearInterval(refresh);
+  }, []);
+
   const fetchItems = async () => {
     try {
       const res = await axios.get("/api/items");

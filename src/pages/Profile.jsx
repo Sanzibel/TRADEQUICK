@@ -11,7 +11,7 @@ import { clearAuthSession } from '../utils/auth';
 export default function Profile() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [user] = useState(() => {
+  const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem("user");
       return savedUser ? JSON.parse(savedUser) : null;
@@ -29,6 +29,16 @@ export default function Profile() {
   const [listings, setListings] = useState([]);
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [settingsForm, setSettingsForm] = useState(() => ({
+    full_name: user?.full_name || '',
+    username: user?.username || '',
+    email: user?.email || '',
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+    email_notifications: localStorage.getItem('email_notifications') !== 'false'
+  }));
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -124,6 +134,46 @@ export default function Profile() {
     }
   };
 
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    if (!token || !user) return;
+
+    if (settingsForm.new_password && settingsForm.new_password !== settingsForm.confirm_password) {
+      toast.error("New passwords do not match.");
+      return;
+    }
+
+    setSavingSettings(true);
+    try {
+      const res = await axios.put(`/api/auth/profile/${user.user_id}`, {
+        full_name: settingsForm.full_name,
+        username: settingsForm.username,
+        email: settingsForm.email,
+        current_password: settingsForm.current_password,
+        new_password: settingsForm.new_password
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      localStorage.setItem('email_notifications', String(settingsForm.email_notifications));
+      setToken(res.data.token);
+      setUser(res.data.user);
+      setSettingsForm(prev => ({
+        ...prev,
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+      }));
+      toast.success("Settings saved.");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to save settings.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const logout = () => {
     clearAuthSession();
     setToken(null);
@@ -158,7 +208,6 @@ export default function Profile() {
           </div>
           <div className="wallet-summary">
             <p>Balance: <span className="gold-glow">${parseFloat(user.balance).toFixed(2)}</span></p>
-            <button className="btn-gold">Top Up</button>
           </div>
         </div>
 
@@ -322,26 +371,69 @@ export default function Profile() {
           )}
 
           {activeTab === 'settings' && (
-            <div className="settings-form">
+            <form className="settings-form" onSubmit={handleSaveSettings}>
               <div className="form-group">
-                <label>Change Password</label>
-                <input type="password" placeholder="New Password" />
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  value={settingsForm.full_name}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, full_name: e.target.value })}
+                  placeholder="Your display name"
+                />
               </div>
               <div className="form-group">
-                <label>Theme Toggle</label>
-                <div className="toggle-switch">
-                  <span className="gold-glow">Black & Gold (Active)</span>
-                </div>
+                <label>Username</label>
+                <input
+                  type="text"
+                  value={settingsForm.username}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, username: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  value={settingsForm.email}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Change Password</label>
+                <input
+                  type="password"
+                  placeholder="Current password"
+                  value={settingsForm.current_password}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, current_password: e.target.value })}
+                />
+                <input
+                  type="password"
+                  placeholder="New password"
+                  value={settingsForm.new_password}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, new_password: e.target.value })}
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={settingsForm.confirm_password}
+                  onChange={(e) => setSettingsForm({ ...settingsForm, confirm_password: e.target.value })}
+                />
               </div>
               <div className="form-group">
                 <label>Notifications</label>
                 <div className="checkbox-group">
-                  <input type="checkbox" id="email-notif" defaultChecked />
+                  <input
+                    type="checkbox"
+                    id="email-notif"
+                    checked={settingsForm.email_notifications}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, email_notifications: e.target.checked })}
+                  />
                   <label htmlFor="email-notif">Email Alerts for Offers</label>
                 </div>
               </div>
-              <button className="btn-gold">Save Changes</button>
-            </div>
+              <button className="btn-gold" disabled={savingSettings}>{savingSettings ? 'Saving...' : 'Save Changes'}</button>
+            </form>
           )}
 
           {activeTab === 'support' && (

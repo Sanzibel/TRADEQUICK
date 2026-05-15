@@ -4,10 +4,14 @@ exports.postItem = async (req, res) => {
   try {
     const { user_id, name, game, description, value, category, tags, screenshot_url } = req.body;
     const db = await sql.getDB();
+
+    if (!user_id || !name?.trim() || !game?.trim() || !Number(value)) {
+      return res.status(400).json({ error: "User, item name, game, and value are required" });
+    }
     
     const result = await db.run(
       'INSERT INTO ItemPosts (user_id, name, game, description, value, category, tags, screenshot_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [user_id, name, game, description, value, category, tags, screenshot_url]
+      [user_id, name.trim(), game.trim(), description || null, Number(value), category || null, tags || null, screenshot_url || null]
     );
 
     res.status(201).json({ message: "Item posted successfully", post_id: result.lastID });
@@ -96,14 +100,53 @@ exports.deleteListing = async (req, res) => {
     
     // Security check: ensure the user owns the listing
     const listing = await db.get('SELECT user_id FROM ItemPosts WHERE post_id = ?', [post_id]);
-    if (!listing || listing.user_id !== parseInt(user_id)) {
+    if (!listing) {
+      return res.status(404).json({ error: "Listing not found" });
+    }
+    if (Number(listing.user_id) !== Number(user_id)) {
       return res.status(403).json({ error: "Unauthorized to delete this listing" });
     }
 
-    await db.run('DELETE FROM ItemPosts WHERE post_id = ?', [post_id]);
-    // Also remove any bookmarks for this post
-    await db.run('DELETE FROM Bookmarks WHERE post_id = ?', [post_id]);
+    await removeListing(db, post_id);
     
+    res.json({ message: "Listing removed successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete listing" });
+  }
+};
+
+const removeListing = async (db, postId) => {
+  const trades = await db.all('SELECT trade_id FROM Trades WHERE item_offered = ? OR item_requested = ?', [postId, postId]);
+
+  for (const trade of trades) {
+    const tickets = await db.all('SELECT ticket_id FROM TradeTickets WHERE trade_id = ?', [trade.trade_id]);
+    for (const ticket of tickets) {
+      await db.run('DELETE FROM TradeTicketItems WHERE ticket_id = ?', [ticket.ticket_id]);
+      await db.run('DELETE FROM TradeTicketLogs WHERE ticket_id = ?', [ticket.ticket_id]);
+      await db.run('DELETE FROM TradeTicketStatusHistory WHERE ticket_id = ?', [ticket.ticket_id]);
+    }
+    await db.run('DELETE FROM TradeTickets WHERE trade_id = ?', [trade.trade_id]);
+    await db.run('DELETE FROM Messages WHERE trade_id = ?', [trade.trade_id]);
+    await db.run('DELETE FROM TradeLogs WHERE trade_id = ?', [trade.trade_id]);
+  }
+
+  await db.run('DELETE FROM Bookmarks WHERE post_id = ?', [postId]);
+  await db.run('DELETE FROM Trades WHERE item_offered = ? OR item_requested = ?', [postId, postId]);
+  await db.run('DELETE FROM ItemPosts WHERE post_id = ?', [postId]);
+};
+
+exports.adminDeleteListing = async (req, res) => {
+  try {
+    const { post_id } = req.params;
+    const db = await sql.getDB();
+    const listing = await db.get('SELECT post_id FROM ItemPosts WHERE post_id = ?', [post_id]);
+
+    if (!listing) {
+      return res.status(404).json({ error: "Listing not found" });
+    }
+
+    await removeListing(db, post_id);
     res.json({ message: "Listing removed successfully" });
   } catch (err) {
     console.error(err);

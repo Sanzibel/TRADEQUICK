@@ -16,9 +16,7 @@ const steps = [
 
 const middlemanActions = [
   { action: 'received_a', label: 'Received from User A' },
-  { action: 'verified_a', label: 'Verify User A Item' },
-  { action: 'received_b', label: 'Received from User B' },
-  { action: 'verified_b', label: 'Verify User B Item' }
+  { action: 'received_b', label: 'Received from User B' }
 ];
 
 export default function TradeTicketRoom() {
@@ -36,13 +34,8 @@ export default function TradeTicketRoom() {
   });
 
   const [payload, setPayload] = useState(null);
-  const [itemForm, setItemForm] = useState({
-    game_name: '',
-    item_name: '',
-    quantity: 1,
-    screenshot_url: '',
-    notes: ''
-  });
+  const [itemForm, setItemForm] = useState({ post_id: '', quantity: 1 });
+  const [userListings, setUserListings] = useState([]);
   const [middlemanId, setMiddlemanId] = useState('');
   const [actionEvidence, setActionEvidence] = useState('');
   const [actionNote, setActionNote] = useState('');
@@ -72,20 +65,13 @@ export default function TradeTicketRoom() {
       return;
     }
     fetchTicket();
+    fetchUserListings();
     pollingRef.current = setInterval(fetchTicket, 5000);
     return () => clearInterval(pollingRef.current);
   }, [ticketCode]);
 
   useEffect(() => {
-    if (mySubmission) {
-      setItemForm({
-        game_name: mySubmission.game_name || '',
-        item_name: mySubmission.item_name || '',
-        quantity: mySubmission.quantity || 1,
-        screenshot_url: mySubmission.screenshot_url || '',
-        notes: mySubmission.notes || ''
-      });
-    }
+    if (mySubmission) setItemForm(prev => ({ ...prev, quantity: mySubmission.quantity || 1 }));
   }, [mySubmission?.item_submission_id]);
 
   const fetchTicket = async () => {
@@ -96,6 +82,16 @@ export default function TradeTicketRoom() {
       console.error('Failed to fetch ticket:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserListings = async () => {
+    if (!user?.user_id) return;
+    try {
+      const res = await axios.get(`/api/items/listings/${user.user_id}`);
+      setUserListings(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Failed to fetch user listings:', err);
     }
   };
 
@@ -112,10 +108,14 @@ export default function TradeTicketRoom() {
 
   const submitItem = async (e) => {
     e.preventDefault();
+    if (!itemForm.post_id) {
+      toast.error('Select one of your listed items first.');
+      return;
+    }
     try {
       const res = await axios.post(`/api/tickets/${ticketCode}/items`, {
         user_id: user.user_id,
-        ...itemForm,
+        post_id: Number(itemForm.post_id),
         quantity: Number(itemForm.quantity)
       });
       setPayload(res.data);
@@ -266,14 +266,15 @@ export default function TradeTicketRoom() {
             {isParticipant && !['Completed', 'Cancelled'].includes(ticket.status) && (
               <form className="ticket-form" onSubmit={submitItem}>
                 <h3>{mySubmission ? 'Update My Item Declaration' : 'Submit My Item Declaration'}</h3>
-                <div className="form-row">
-                  <input placeholder="Game name" value={itemForm.game_name} onChange={(e) => setItemForm({ ...itemForm, game_name: e.target.value })} required />
-                  <input placeholder="Item name" value={itemForm.item_name} onChange={(e) => setItemForm({ ...itemForm, item_name: e.target.value })} required />
-                  <input type="number" min="1" placeholder="Qty" value={itemForm.quantity} onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })} required />
-                </div>
-                <textarea placeholder="Optional notes" value={itemForm.notes} onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })} />
-                <input type="file" accept="image/*" onChange={(e) => readFileAsDataUrl(e.target.files[0], (url) => setItemForm({ ...itemForm, screenshot_url: url }))} />
-                {itemForm.screenshot_url && <img className="evidence-preview" src={itemForm.screenshot_url} alt="Evidence preview" />}
+                <select value={itemForm.post_id} onChange={(e) => setItemForm({ ...itemForm, post_id: e.target.value })} required>
+                  <option value="">Select one of your active listings</option>
+                  {userListings.map(listing => (
+                    <option key={listing.post_id} value={listing.post_id}>
+                      {listing.name} / {listing.game} / ${Number(listing.value).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+                {userListings.length === 0 && <p className="muted">Post a listing first, then return here to declare it.</p>}
                 <button className="btn-gold">Save Declaration</button>
               </form>
             )}
@@ -303,7 +304,7 @@ export default function TradeTicketRoom() {
                 <button className="danger-btn" onClick={cancelTicket}>Cancel Ticket</button>
               </div>
             ) : (
-              <p className="muted">Only the assigned middleman can verify received items and complete the trade.</p>
+              <p className="muted">Only the assigned middleman can mark received items and complete the trade.</p>
             )}
           </aside>
         </div>
