@@ -5,6 +5,7 @@ const VALID_STATUSES = [
   "Waiting for User B",
   "Middleman Assigned",
   "In Verification",
+  "Funds secured",
   "Completed",
   "Cancelled"
 ];
@@ -57,6 +58,52 @@ const addTicketLog = async (db, ticketId, actorUserId, eventType, message, evide
     `INSERT INTO TradeTicketLogs (ticket_id, actor_user_id, event_type, message, evidence_url)
      VALUES (?, ?, ?, ?, ?)`,
     [ticketId, actorUserId || null, eventType, message, evidenceUrl]
+  );
+};
+
+const parseLogDetails = (message) => {
+  try {
+    return JSON.parse(message);
+  } catch {
+    return { note: message };
+  }
+};
+
+const buildPaymentState = (logs) => {
+  const state = {
+    request: null,
+    receipt: null,
+    complete: null,
+    transaction_id: null,
+    status: 'not_requested'
+  };
+
+  for (const log of logs) {
+    if (log.event_type === 'payment_requested') {
+      state.request = { ...parseLogDetails(log.message), evidence_url: log.evidence_url, created_at: log.created_at };
+      state.transaction_id = state.request.transaction_id;
+      state.status = 'requested';
+    }
+    if (log.event_type === 'payment_receipt_submitted') {
+      state.receipt = { ...parseLogDetails(log.message), evidence_url: log.evidence_url, created_at: log.created_at };
+      state.transaction_id = state.receipt.transaction_id || state.transaction_id;
+      state.status = 'receipt_submitted';
+    }
+    if (log.event_type === 'payment_complete') {
+      state.complete = { ...parseLogDetails(log.message), evidence_url: log.evidence_url, created_at: log.created_at };
+      state.transaction_id = state.complete.transaction_id || state.transaction_id;
+      state.status = 'complete';
+    }
+  }
+
+  return state;
+};
+
+const addTradeMessage = async (db, ticket, content, type = "system") => {
+  if (!ticket.trade_id) return;
+  await db.run(
+    'INSERT INTO Messages (sender_id, receiver_id, trade_id, convo_id, content, type, timestamp) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+    [0, 0, Number(ticket.trade_id), null, content, type]
   );
 };
 
@@ -115,7 +162,7 @@ const getTicketPayload = async (db, ticketCode) => {
     [ticket.ticket_id]
   );
 
-  return { ticket, items, logs, history };
+  return { ticket, items, logs, history, payment: buildPaymentState(logs) };
 };
 
 const getTicketPayloadByTradeId = async (db, tradeId) => {
@@ -379,12 +426,142 @@ exports.middlemanAction = async (req, res) => {
     }
 
     await addTicketLog(db, ticket.ticket_id, actor_user_id, action, note || MIDDLEMAN_ACTIONS[action], evidence_url || null);
-    await setTicketStatus(db, ticket, "In Verification", actor_user_id, MIDDLEMAN_ACTIONS[action]);
+    if (ticket.status !== "Funds secured") {
+      await setTicketStatus(db, ticket, "In Verification", actor_user_id, MIDDLEMAN_ACTIONS[action]);
+    }
+    await addTradeMessage(db, ticket, MIDDLEMAN_ACTIONS[action]);
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
   } catch (err) {
     console.error("[MIDDLEMAN_ACTION_ERROR]", err);
     res.status(500).json({ error: "Failed to save middleman action" });
+  }
+};
+
+exports.requestPayment = async (req, res) => {
+  const db = await sql.getDB();
+  try {
+    const { ticketCode } = req.params;
+    const { actor_user_id, method, gcash_option, gcash_number, qr_url, amount, note } = req.body;
+    const ticket = await fetchTicketByCode(db, ticketCode);
+
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+    if (Number(ticket.middleman_user_id) !== Number(actor_user_id)) {
+      return res.status(403).json({ error: "Only the assigned middleman can request payment" });
+    }
+    if (method !== "gcash") {
+      return res.status(400).json({ error: "GCash is the only supported payment method right now" });
+    }
+    if (!["qr", "number"].includes(gcash_option)) {
+      return res.status(400).json({ error: "Select GCash QR Code or Direct Number" });
+    }
+    if (gcash_option === "number" && !String(gcash_number || "").trim()) {
+      return res.status(400).json({ error: "GCash number is required" });
+    }
+    if (gcash_option === "qr" && !String(qr_url || "").startsWith("data:image/")) {
+      return res.status(400).json({ error: "GCash QR image is required" });
+    }
+
+    const transactionId = `QT-PAY-${ticket.ticket_code}-${Date.now().toString(36).toUpperCase()}`;
+    const details = {
+      transaction_id: transactionId,
+      method,
+      gcash_option,
+      gcash_number: gcash_option === "number" ? String(gcash_number).trim() : null,
+      amount: amount ? Number(amount) : null,
+      note: note || null
+    };
+
+    await addTicketLog(db, ticket.ticket_id, actor_user_id, "payment_requested", JSON.stringify(details), gcash_option === "qr" ? qr_url : null);
+    await addTradeMessage(db, ticket, `Payment requested by middleman. Transaction ID: ${transactionId}`);
+
+    res.json(await getTicketPayload(db, ticket.ticket_code));
+  } catch (err) {
+    console.error("[REQUEST_PAYMENT_ERROR]", err);
+    res.status(500).json({ error: "Failed to request payment" });
+  }
+};
+
+exports.submitPaymentReceipt = async (req, res) => {
+  const db = await sql.getDB();
+  try {
+    const { ticketCode } = req.params;
+    const { user_id, receipt_url, receipt_name, receipt_type } = req.body;
+    const ticket = await fetchTicketByCode(db, ticketCode);
+
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+    const isParticipant = [ticket.creator_user_id, ticket.joiner_user_id].some(id => Number(id) === Number(user_id));
+    if (!isParticipant) return res.status(403).json({ error: "Only trade participants can submit payment receipts" });
+
+    const logs = await db.all("SELECT * FROM TradeTicketLogs WHERE ticket_id = ? ORDER BY created_at ASC", [ticket.ticket_id]);
+    const payment = buildPaymentState(logs);
+    if (!payment.request) {
+      return res.status(400).json({ error: "Middleman must request payment first" });
+    }
+
+    const receipt = String(receipt_url || "");
+    const isImage = receipt.startsWith("data:image/jpeg") || receipt.startsWith("data:image/jpg") || receipt.startsWith("data:image/png") || receipt.startsWith("data:image/webp");
+    const isPdf = receipt.startsWith("data:application/pdf");
+    if (!isImage && !isPdf) {
+      return res.status(400).json({ error: "Receipt must be an image or PDF" });
+    }
+    if (receipt.length > 4_500_000) {
+      return res.status(400).json({ error: "Receipt is too large. Max upload size is 3MB." });
+    }
+
+    const details = {
+      transaction_id: payment.transaction_id,
+      receipt_name: receipt_name || "payment-receipt",
+      receipt_type: receipt_type || (isPdf ? "application/pdf" : "image")
+    };
+
+    await addTicketLog(db, ticket.ticket_id, user_id, "payment_receipt_submitted", JSON.stringify(details), receipt);
+    await addTradeMessage(db, ticket, `Payment receipt submitted. Transaction ID: ${payment.transaction_id}`);
+
+    res.json(await getTicketPayload(db, ticket.ticket_code));
+  } catch (err) {
+    console.error("[SUBMIT_PAYMENT_RECEIPT_ERROR]", err);
+    res.status(500).json({ error: "Failed to submit receipt" });
+  }
+};
+
+exports.completePayment = async (req, res) => {
+  const db = await sql.getDB();
+  try {
+    const { ticketCode } = req.params;
+    const { actor_user_id, note } = req.body;
+    const ticket = await fetchTicketByCode(db, ticketCode);
+
+    if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+    if (Number(ticket.middleman_user_id) !== Number(actor_user_id)) {
+      return res.status(403).json({ error: "Only the assigned middleman can confirm payment" });
+    }
+
+    const logs = await db.all("SELECT * FROM TradeTicketLogs WHERE ticket_id = ? ORDER BY created_at ASC", [ticket.ticket_id]);
+    const payment = buildPaymentState(logs);
+    if (!payment.receipt) {
+      return res.status(400).json({ error: "A receipt must be uploaded before payment can be completed" });
+    }
+
+    const details = {
+      transaction_id: payment.transaction_id,
+      receipt_url: payment.receipt.evidence_url,
+      note: note || "Payment confirmed by middleman"
+    };
+
+    await addTicketLog(db, ticket.ticket_id, actor_user_id, "payment_complete", JSON.stringify(details), payment.receipt.evidence_url || null);
+    await setTicketStatus(db, ticket, "Funds secured", actor_user_id, "Payment confirmed by middleman.");
+    await addTradeMessage(
+      db,
+      ticket,
+      `Payment confirmed by middleman. Transaction ID: ${payment.transaction_id}. Receipt link is attached to the escrow payment record.`,
+      "system"
+    );
+
+    res.json(await getTicketPayload(db, ticket.ticket_code));
+  } catch (err) {
+    console.error("[COMPLETE_PAYMENT_ERROR]", err);
+    res.status(500).json({ error: "Failed to complete payment" });
   }
 };
 
@@ -413,12 +590,16 @@ exports.completeTicket = async (req, res) => {
     if (missing.length > 0) {
       return res.status(400).json({ error: `Missing received steps: ${missing.join(", ")}` });
     }
+    if (!eventTypes.has("payment_complete")) {
+      return res.status(400).json({ error: "Payment must be confirmed before completing the trade" });
+    }
 
     await addTicketLog(db, ticket.ticket_id, actor_user_id, "completed", note || "Middleman completed the exchange and saved final evidence.", evidence_url || null);
     await setTicketStatus(db, ticket, "Completed", actor_user_id, "Items transferred and ticket completed.");
     if (ticket.trade_id) {
       await db.run("UPDATE Trades SET status = ?, status_detail = ? WHERE trade_id = ?", ["completed", "confirmed", ticket.trade_id]);
     }
+    await addTradeMessage(db, ticket, "Trade has been completed.", "system");
 
     res.json(await getTicketPayload(db, ticket.ticket_code));
   } catch (err) {
@@ -497,7 +678,7 @@ exports.getAdminTickets = async (req, res) => {
 
     res.json({
       active: tickets.filter(t => !["Completed", "Cancelled"].includes(t.status)),
-      verificationQueue: tickets.filter(t => ["Middleman Assigned", "In Verification"].includes(t.status)),
+      verificationQueue: tickets.filter(t => ["Middleman Assigned", "In Verification", "Funds secured"].includes(t.status)),
       completed: tickets.filter(t => t.status === "Completed"),
       cancelled: tickets.filter(t => t.status === "Cancelled")
     });

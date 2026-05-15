@@ -49,13 +49,6 @@
   text-transform: uppercase;
 }
 
-.wallet-summary {
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .profile-tabs {
   display: flex;
   gap: 10px;
@@ -167,9 +160,6 @@
   }
   .profile-info {
     flex-direction: column;
-  }
-  .wallet-summary {
-    text-align: center;
   }
   .profile-tabs {
     flex-wrap: wrap;

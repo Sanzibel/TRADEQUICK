@@ -50,6 +50,11 @@ export default function Home() {
 
   useEffect(() => {
     fetchItems();
+    const completedMessage = localStorage.getItem('quicktrade_trade_completed');
+    if (completedMessage) {
+      toast.success(completedMessage);
+      localStorage.removeItem('quicktrade_trade_completed');
+    }
     if (user) {
       fetchBookmarks();
       // Verify user session

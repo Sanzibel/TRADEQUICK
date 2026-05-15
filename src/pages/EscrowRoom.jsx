@@ -35,6 +35,9 @@ export default function EscrowRoom() {
   const [trade, setTrade] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [chatImage, setChatImage] = useState('');
+  const [chatImageName, setChatImageName] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [tradeLink, setTradeLink] = useState(null);
   const [ticketPayload, setTicketPayload] = useState(null);
@@ -44,17 +47,30 @@ export default function EscrowRoom() {
   const [middlemanId, setMiddlemanId] = useState('');
   const [actionEvidence, setActionEvidence] = useState('');
   const [actionNote, setActionNote] = useState('');
+  const [paymentForm, setPaymentForm] = useState({
+    method: 'gcash',
+    gcash_option: 'number',
+    gcash_number: '',
+    qr_url: '',
+    amount: '',
+    note: ''
+  });
+  const [receiptFile, setReceiptFile] = useState({ url: '', name: '', type: '' });
+  const [paymentBusy, setPaymentBusy] = useState(false);
 
   const userId = Number(user?.user_id || user?.id);
   const isAdmin = user?.role === 'admin';
   const ticket = ticketPayload?.ticket;
   const items = ticketPayload?.items || EMPTY_ARRAY;
   const logs = ticketPayload?.logs || EMPTY_ARRAY;
+  const payment = ticketPayload?.payment || { status: 'not_requested' };
   const roomStatus = ticket?.status || trade?.status || 'active';
 
   const mySubmission = useMemo(() => {
     return items.find(item => Number(item.user_id) === userId);
   }, [items, userId]);
+
+  const logTypes = useMemo(() => new Set(logs.map(log => log.event_type)), [logs]);
 
   const ticketRole = useMemo(() => {
     if (!ticket || !userId) return 'viewer';
@@ -120,6 +136,10 @@ export default function EscrowRoom() {
     try {
       const res = await axios.get(`/api/tickets/trade/${tradeId}`);
       setTicketPayload(res.data);
+      if (res.data?.ticket?.status === 'Completed') {
+        localStorage.setItem('quicktrade_trade_completed', 'Trade has been completed.');
+        navigate('/', { replace: true });
+      }
     } catch (err) {
       console.error('Failed to fetch middleman room:', err);
     }
@@ -173,6 +193,8 @@ export default function EscrowRoom() {
         content: m.content,
         timestamp: m.timestamp,
         isUser: Number(m.sender_id) === userId,
+        type: m.type || 'user',
+        isImage: m.type === 'image',
         isAI: Number(m.sender_id) === 0 || m.type === 'bot',
         isSystem: m.type === 'system'
       }));
@@ -251,9 +273,46 @@ export default function EscrowRoom() {
     reader.readAsDataURL(file);
   };
 
+  const readChatImage = (file) => {
+    if (!file) return;
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Chat images must be JPG, PNG, JPEG, or WEBP.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Chat image size exceeds 2MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setChatImage(reader.result);
+      setChatImageName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const readReceiptFile = (file) => {
+    if (!file) return;
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Receipt must be an image or PDF.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error('Receipt size exceeds 3MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReceiptFile({ url: reader.result, name: file.name, type: file.type });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !trade) return;
+    if ((!newMessage.trim() && !chatImage) || !trade || sendingMessage) return;
 
     const offererId = Number(trade.offerer_user_id);
     const ownerId = Number(trade.owner_user_id);
@@ -261,19 +320,35 @@ export default function EscrowRoom() {
     const msgContent = newMessage;
     setNewMessage('');
     shouldFollowChatRef.current = true;
+    setSendingMessage(true);
 
     try {
-      await axios.post('/api/messages/send', {
-        sender_id: userId,
-        receiver_id: receiverId,
-        trade_id: Number(tradeId),
-        content: msgContent,
-        type: 'user'
-      });
+      if (msgContent.trim()) {
+        await axios.post('/api/messages/send', {
+          sender_id: userId,
+          receiver_id: receiverId,
+          trade_id: Number(tradeId),
+          content: msgContent,
+          type: 'user'
+        });
+      }
+      if (chatImage) {
+        await axios.post('/api/messages/send', {
+          sender_id: userId,
+          receiver_id: receiverId,
+          trade_id: Number(tradeId),
+          content: chatImage,
+          type: 'image'
+        });
+        setChatImage('');
+        setChatImageName('');
+      }
       await fetchMessages();
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Unknown error';
       setMessages(prev => [...prev, { sender: 'SYSTEM', content: `SYSTEM ERROR: ${errMsg}`, isSystem: true }]);
+    } finally {
+      setSendingMessage(false);
     }
   };
 
@@ -323,8 +398,67 @@ export default function EscrowRoom() {
       setTicketPayload(res.data);
       setActionEvidence('');
       setActionNote('');
+      toast.success(`${middlemanActions.find(item => item.action === action)?.label || 'Action'} saved.`);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save action');
+    }
+  };
+
+  const requestPayment = async () => {
+    if (!ticket || paymentBusy) return;
+    setPaymentBusy(true);
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/payment-request`, {
+        actor_user_id: userId,
+        ...paymentForm
+      });
+      setTicketPayload(res.data);
+      toast.success('Payment request sent.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to request payment');
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
+
+  const submitReceipt = async () => {
+    if (!ticket || paymentBusy) return;
+    if (!receiptFile.url) {
+      toast.error('Upload a receipt first.');
+      return;
+    }
+    setPaymentBusy(true);
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/payment-receipt`, {
+        user_id: userId,
+        receipt_url: receiptFile.url,
+        receipt_name: receiptFile.name,
+        receipt_type: receiptFile.type
+      });
+      setTicketPayload(res.data);
+      setReceiptFile({ url: '', name: '', type: '' });
+      toast.success('Receipt submitted for middleman review.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to submit receipt');
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
+
+  const completePayment = async () => {
+    if (!ticket || paymentBusy) return;
+    setPaymentBusy(true);
+    try {
+      const res = await axios.post(`/api/tickets/${ticket.ticket_code}/payment-complete`, {
+        actor_user_id: userId,
+        note: actionNote
+      });
+      setTicketPayload(res.data);
+      toast.success('Payment marked complete. Funds secured.');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to complete payment');
+    } finally {
+      setPaymentBusy(false);
     }
   };
 
@@ -339,6 +473,8 @@ export default function EscrowRoom() {
       setTicketPayload(res.data);
       await fetchTradeDetails();
       toast.success('Trade completed and logged.');
+      localStorage.setItem('quicktrade_trade_completed', 'Trade has been completed.');
+      navigate('/', { replace: true });
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to complete trade');
     }
@@ -474,14 +610,32 @@ export default function EscrowRoom() {
                     <div style={{ fontSize: '0.7rem', color: msg.isAI ? 'var(--gold)' : '#888', marginBottom: '5px', fontWeight: 'bold' }}>
                       {String(msg.sender || 'User').toUpperCase()}
                     </div>
-                    <div style={{ color: msg.isAI ? '#fff' : (msg.isSystem ? '#888' : '#eee') }}>{msg.content}</div>
+                    {msg.isImage ? (
+                      <img src={msg.content} alt="Chat upload" style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid #333' }} />
+                    ) : (
+                      <div style={{ color: msg.isAI ? '#fff' : (msg.isSystem ? '#888' : '#eee') }}>{msg.content}</div>
+                    )}
                   </div>
                 ))}
                 {isTyping && <div style={{ color: 'var(--gold)', fontSize: '0.8rem', paddingLeft: '10px' }}>AI Trade Assistant is typing...</div>}
                 <div ref={chatEndRef} />
               </div>
 
-              <form onSubmit={handleSendMessage} style={{ padding: '20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', backgroundColor: '#0d0d0d' }}>
+              {chatImage && (
+                <div style={{ padding: '12px 20px', borderTop: '1px solid #222', backgroundColor: '#0d0d0d' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <img src={chatImage} alt="Chat preview" style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--gold)' }} />
+                    <span style={{ color: '#ccc', fontSize: '0.85rem', flex: 1 }}>{chatImageName}</span>
+                    <button type="button" className="btn-outline-gold" onClick={() => { setChatImage(''); setChatImageName(''); }}>Remove</button>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleSendMessage} style={{ padding: '20px', borderTop: '1px solid #222', display: 'flex', gap: '10px', backgroundColor: '#0d0d0d', alignItems: 'center' }}>
+                <label className="btn-outline-gold" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Image
+                  <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(e) => readChatImage(e.target.files[0])} style={{ display: 'none' }} />
+                </label>
                 <input
                   type="text"
                   value={newMessage}
@@ -498,12 +652,84 @@ export default function EscrowRoom() {
                     borderRadius: '6px'
                   }}
                 />
-                <button type="submit" className="btn-gold">Send</button>
+                <button type="submit" className="btn-gold" disabled={sendingMessage}>{sendingMessage ? 'Sending...' : 'Send'}</button>
               </form>
             </div>
           </div>
 
           <aside style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <section className="ticket-panel">
+              <h2>Middleman Payment</h2>
+              <div style={{ display: 'grid', gap: '8px', marginBottom: '14px', color: '#aaa', fontSize: '0.82rem' }}>
+                <div><strong style={{ color: '#fff' }}>Status:</strong> {payment.status === 'complete' ? 'Funds secured' : payment.status.replaceAll('_', ' ')}</div>
+                {payment.transaction_id && <div><strong style={{ color: '#fff' }}>Transaction:</strong> {payment.transaction_id}</div>}
+              </div>
+
+              {canManageMiddleman && ticket?.middleman_user_id && !payment.complete && (
+                <div className="ticket-form compact">
+                  <label style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>Payment Method</label>
+                  <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}>
+                    <option value="gcash">GCash</option>
+                  </select>
+                  <label style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>GCash Option</label>
+                  <select value={paymentForm.gcash_option} onChange={(e) => setPaymentForm({ ...paymentForm, gcash_option: e.target.value })}>
+                    <option value="number">Direct Number</option>
+                    <option value="qr">QR Code</option>
+                  </select>
+                  {paymentForm.gcash_option === 'number' ? (
+                    <input value={paymentForm.gcash_number} onChange={(e) => setPaymentForm({ ...paymentForm, gcash_number: e.target.value })} placeholder="GCash number" />
+                  ) : (
+                    <>
+                      <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" onChange={(e) => readFileAsDataUrl(e.target.files[0], (url) => setPaymentForm({ ...paymentForm, qr_url: url }))} />
+                      {paymentForm.qr_url && <img className="evidence-preview" src={paymentForm.qr_url} alt="GCash QR preview" />}
+                    </>
+                  )}
+                  <input type="number" min="0" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} placeholder="Amount requested" />
+                  <textarea value={paymentForm.note} onChange={(e) => setPaymentForm({ ...paymentForm, note: e.target.value })} placeholder="Payment instructions" />
+                  <button className="btn-gold" onClick={requestPayment} disabled={paymentBusy}>{paymentBusy ? 'Working...' : 'Request Payment'}</button>
+                </div>
+              )}
+
+              {payment.request && (
+                <div style={{ background: '#0a0a0a', border: '1px solid #2d2d2d', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                  <p style={{ color: 'var(--gold)', fontWeight: 'bold', marginBottom: '8px' }}>GCash Payment Request</p>
+                  {payment.request.amount && <p className="muted">Amount: ${Number(payment.request.amount).toLocaleString()}</p>}
+                  {payment.request.gcash_number && <p className="muted">Number: {payment.request.gcash_number}</p>}
+                  {payment.request.note && <p className="muted">{payment.request.note}</p>}
+                  {payment.request.evidence_url && <img className="evidence-preview" src={payment.request.evidence_url} alt="GCash QR" />}
+                </div>
+              )}
+
+              {isParticipant && payment.request && !payment.complete && (
+                <div className="ticket-form compact">
+                  <p className="muted">Upload your payment receipt for middleman review. Images and PDFs are accepted.</p>
+                  <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" onChange={(e) => readReceiptFile(e.target.files[0])} />
+                  {receiptFile.url && receiptFile.type === 'application/pdf' && <a className="btn-outline-gold" href={receiptFile.url} target="_blank" rel="noreferrer">Preview PDF Receipt</a>}
+                  {receiptFile.url && receiptFile.type !== 'application/pdf' && <img className="evidence-preview" src={receiptFile.url} alt="Receipt preview" />}
+                  <button className="btn-gold" onClick={submitReceipt} disabled={paymentBusy}>{paymentBusy ? 'Uploading...' : 'Submit Receipt'}</button>
+                </div>
+              )}
+
+              {payment.receipt && (
+                <div style={{ background: '#0a0a0a', border: '1px solid #2d2d2d', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                  <p style={{ color: 'var(--gold)', fontWeight: 'bold' }}>Receipt Submitted</p>
+                  {payment.receipt.receipt_type === 'application/pdf' ? (
+                    <a className="btn-outline-gold" href={payment.receipt.evidence_url} target="_blank" rel="noreferrer">Open Receipt PDF</a>
+                  ) : (
+                    <img className="evidence-preview" src={payment.receipt.evidence_url} alt="Payment receipt" />
+                  )}
+                </div>
+              )}
+
+              {canManageMiddleman && payment.receipt && !payment.complete && (
+                <button className="btn-gold" onClick={completePayment} disabled={paymentBusy}>
+                  {paymentBusy ? 'Confirming...' : 'Mark Payment Complete'}
+                </button>
+              )}
+
+              {payment.complete && <p style={{ color: '#44ff88', fontWeight: 'bold' }}>Payment confirmed by middleman. Funds secured.</p>}
+            </section>
+
             <section className="ticket-panel">
               <h2>Middleman Trade Room</h2>
               <div style={{ display: 'grid', gap: '8px', marginBottom: '16px', fontSize: '0.82rem', color: '#aaa' }}>
@@ -528,8 +754,8 @@ export default function EscrowRoom() {
                   <input type="file" accept="image/*" onChange={(e) => readFileAsDataUrl(e.target.files[0], setActionEvidence)} />
                   {actionEvidence && <img className="evidence-preview" src={actionEvidence} alt="Action evidence" />}
                   {middlemanActions.map(item => (
-                    <button key={item.action} className="btn-outline-gold" onClick={() => performAction(item.action)}>
-                      {item.label}
+                    <button key={item.action} className="btn-outline-gold" onClick={() => performAction(item.action)} disabled={logTypes.has(item.action)}>
+                      {logTypes.has(item.action) ? `${item.label} saved` : item.label}
                     </button>
                   ))}
                   <button className="btn-gold" onClick={completeTicket}>Release / Complete Trade</button>

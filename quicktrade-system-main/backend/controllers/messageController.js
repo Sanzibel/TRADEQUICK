@@ -4,6 +4,21 @@ exports.sendMessage = async (req, res) => {
   const db = await sql.getDB();
   try {
     const { sender_id, receiver_id, trade_id, content, convo_id, type } = req.body;
+    const messageType = type || 'user';
+
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: "Message content is required" });
+    }
+
+    if (messageType === 'image') {
+      const allowed = ['data:image/jpeg', 'data:image/jpg', 'data:image/png', 'data:image/webp'];
+      if (!allowed.some(prefix => String(content).startsWith(prefix))) {
+        return res.status(400).json({ error: "Only JPG, PNG, JPEG, or WEBP images are allowed" });
+      }
+      if (String(content).length > 3_000_000) {
+        return res.status(400).json({ error: "Image is too large. Max upload size is 2MB." });
+      }
+    }
     
     // Explicitly cast trade_id to Number if provided
     const tid = trade_id ? Number(trade_id) : null;
@@ -12,7 +27,7 @@ exports.sendMessage = async (req, res) => {
 
     const result = await db.run(
       'INSERT INTO Messages (sender_id, receiver_id, trade_id, convo_id, content, type, timestamp) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-      [sid, rid, tid, convo_id || null, content, type || 'user']
+      [sid, rid, tid, convo_id || null, content, messageType]
     );
 
     res.status(201).json({ 

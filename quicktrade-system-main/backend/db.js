@@ -69,7 +69,6 @@ const initDB = async () => {
                         password TEXT NOT NULL,
                         role TEXT DEFAULT 'user',
                         premium_status INTEGER DEFAULT 0,
-                        balance DECIMAL(18, 2) DEFAULT 0.00,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
@@ -285,7 +284,6 @@ const initDB = async () => {
                         password TEXT NOT NULL,
                         role TEXT DEFAULT 'user',
                         premium_status INTEGER DEFAULT 0,
-                        balance DECIMAL(18, 2) DEFAULT 0.00,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     );

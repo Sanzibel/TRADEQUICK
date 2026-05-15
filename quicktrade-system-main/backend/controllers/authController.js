@@ -92,8 +92,7 @@ exports.login = async (req, res) => {
         full_name: user.full_name,
         email: user.email,
         role,
-        premium_status: user.premium_status,
-        balance: user.balance
+        premium_status: user.premium_status
       } 
     });
   } catch (err) {
@@ -106,7 +105,7 @@ exports.verifyUser = async (req, res) => {
   try {
     const { user_id } = req.params;
     const db = await sql.getDB();
-    const user = await db.get('SELECT user_id, full_name, username, email, role, premium_status, balance FROM users WHERE user_id = ?', [user_id]);
+    const user = await db.get('SELECT user_id, full_name, username, email, role, premium_status FROM users WHERE user_id = ?', [user_id]);
     if (user) {
       res.json({ valid: true, user });
     } else {
@@ -171,7 +170,7 @@ exports.updateProfile = async (req, res) => {
     );
 
     const updated = await db.get(
-      'SELECT user_id, full_name, username, email, role, premium_status, balance FROM users WHERE user_id = ?',
+      'SELECT user_id, full_name, username, email, role, premium_status FROM users WHERE user_id = ?',
       [user_id]
     );
 

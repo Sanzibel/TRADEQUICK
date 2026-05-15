@@ -11,6 +11,7 @@ const steps = [
   { status: 'Pending', label: 'Items Declared' },
   { status: 'Middleman Assigned', label: 'Middleman Assigned' },
   { status: 'In Verification', label: 'Verification' },
+  { status: 'Funds secured', label: 'Funds Secured' },
   { status: 'Completed', label: 'Completed' }
 ];
 

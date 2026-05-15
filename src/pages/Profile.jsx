@@ -206,9 +206,6 @@ export default function Profile() {
               <p className="premium-badge">{user.premium_status ? 'Premium Member' : 'Standard Member'}</p>
             </div>
           </div>
-          <div className="wallet-summary">
-            <p>Balance: <span className="gold-glow">${parseFloat(user.balance).toFixed(2)}</span></p>
-          </div>
         </div>
 
         <div className="profile-tabs">
